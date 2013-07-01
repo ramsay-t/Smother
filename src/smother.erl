@@ -27,14 +27,52 @@ analyze(File) ->
     analyse(File).
 
 instrument(File) ->
-    ?FULL_TD_TP([?RULE(?T("f@(Args@@) when Guard@@ -> Body@@;"),
+    ?STOP_TD_TP([
+		 %?RULE(?T("f@(Args@@) when Guard@@ -> Body@@;"),
+		 %      begin
+		%	   %%ArgNames = get_arg_names(Args@@),
+		%	   Loc = api_refac:start_end_loc(_This@),
+		%	   LocString = get_loc_string(_This@),
+		%	   Declare = {fun_case,wrangler_syntax:revert_forms(Args@@),wrangler_syntax:revert_forms(Guard@@)},
+		%	   smother_server:declare(File,Loc,Declare),
+		%	   ?TO_AST("f@(Args@@) when Guard@@-> smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[Args@@]), Body@@;")
+		 %      end
+		 %      ,true),
+		 ?RULE(?T("if Guards@@@ -> Body@@@ end"),
 		       begin
-			   %%ArgNames = get_arg_names(Args@@),
 			   Loc = api_refac:start_end_loc(_This@),
 			   LocString = get_loc_string(_This@),
-			   Declare = {fun_case,wrangler_syntax:revert_forms(Args@@),wrangler_syntax:revert_forms(Guard@@)},
+			   GuardList@@@ = lists:flatten(lists:map(fun(G) -> wrangler_syntax:revert_forms(G) end, Guards@@@)),
+			   VarList = lists:flatten(lists:map(fun(G) -> api_refac:free_var_names(G) end, Guards@@@)),
+			   VarListString = re:replace(lists:flatten(io_lib:format("~p", [VarList])),"'","",[{return,list},global]),
+			   Declare = {if_expr,VarList,GuardList@@@},
 			   smother_server:declare(File,Loc,Declare),
-			   ?TO_AST("f@(Args@@) when Guard@@-> smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[Args@@]), Body@@;")
+			   ?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
+		       end
+		       ,true),
+		 ?RULE(?T("case Expr@@ of Pats@@@ when Guards@@@ -> Body@@@ end"),
+		       begin
+			   Loc = api_refac:start_end_loc(_This@),
+			   LocString = get_loc_string(_This@),
+
+			   GuardList = lists:map(fun(G) -> 
+							 case wrangler_syntax:revert_forms(G) of 
+							     [] -> {atom,0,true}; 
+							     GG -> GG 
+							 end 
+						 end, Guards@@@),
+			   PatList = lists:map(fun(G) -> 
+						       hd(wrangler_syntax:revert_forms(G))
+					       end, Pats@@@),
+
+			   ExprStx = hd(lists:flatten(wrangler_syntax:revert_forms(Expr@@))),
+
+			   VarList = lists:flatten(lists:map(fun(G) -> api_refac:free_var_names(G) end, Guards@@@)),
+			   VarListString = re:replace(lists:flatten(io_lib:format("~p", [VarList])),"'","",[{return,list},global]),
+
+			   Declare = {case_expr,ExprStx,VarList,lists:zip(PatList,GuardList)},
+			   smother_server:declare(File,Loc,Declare),
+			   ?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[Expr@@ | " ++ VarListString ++ "]), case Expr@@ of Pats@@@ when Guards@@@ -> Body@@@ end end")
 		       end
 		       ,true)
 		], 
