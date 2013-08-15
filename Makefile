@@ -1,7 +1,7 @@
 WRANGLER_ROOT=../wrangler
 LIBS=-pa $(WRANGLER_ROOT)/ebin
 SOURCES=$(wildcard src/*.erl)
-SED=gsed
+SED=sed
 
 default: all
 	$(SED) -i.tmp 's|-include(".*wrangler/include/wrangler.hrl")\.|-include("$(WRANGLER_ROOT)/include/wrangler.hrl")\.|' include/install.hrl

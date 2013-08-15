@@ -3,3 +3,6 @@ deps
 *.o
 *.beam
 *.plt
+abcasetest.COVER.html
+abiftest.COVER.html
+erl_crash.dump

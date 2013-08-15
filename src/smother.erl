@@ -1,5 +1,5 @@
 -module(smother).
--export([compile/1,analyse/1,analyze/1]).
+-export([compile/1,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1]).
 
 -include("include/install.hrl").
 
@@ -10,7 +10,7 @@ compile(Filename) ->
     {ok, [{{Filename, Filename}, AST2}]} = instrument(Filename),
     Code = ?PP(AST2),
     %%io:format("Transformed code to~n~s~n", [Code]),
-    {MFs,EFs,FTs} = get_forms(Code),
+    {MFs,EFs,FTs} = smother_annotater:get_forms(Code),
     %Forms = wrangler_syntax:revert_forms(AST2),
     %%io:format("~n~nForms:~p~n~n",[{MFs,EFs,FTs}]),
     case compile:forms([MFs,EFs,FTs],[debug_info]) of
@@ -26,26 +26,34 @@ analyse(File) ->
 analyze(File) ->
     analyse(File).
 
+analyse_to_file(File) ->
+    smother_server:analyse_to_file(File).
+
+analyze_to_file(File) ->
+    analyse_to_file(File).
+
+
 instrument(File) ->
     ?STOP_TD_TP([
-		 %?RULE(?T("f@(Args@@) when Guard@@ -> Body@@;"),
-		 %      begin
-		%	   %%ArgNames = get_arg_names(Args@@),
-		%	   Loc = api_refac:start_end_loc(_This@),
-		%	   LocString = get_loc_string(_This@),
-		%	   Declare = {fun_case,wrangler_syntax:revert_forms(Args@@),wrangler_syntax:revert_forms(Guard@@)},
-		%	   smother_server:declare(File,Loc,Declare),
-		%	   ?TO_AST("f@(Args@@) when Guard@@-> smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[Args@@]), Body@@;")
-		 %      end
-		 %      ,true),
+		 ?RULE(?T("f@(Args@@) when Guard@@ -> Body@@;"),
+		       begin
+			   %%ArgNames = get_arg_names(Args@@),
+			   Loc = api_refac:start_end_loc(_This@),
+			   LocString = get_loc_string(_This@),
+			   FName = erl_parse:normalise(wrangler_syntax:revert(_W_f@)),
+			   Declare = {fun_case,FName,length(Args@@),Args@@,Guard@@},
+			   smother_server:declare(File,Loc,Declare),
+			   ?TO_AST("f@(Args@@) when Guard@@-> smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[Args@@]), Body@@;")
+		       end
+		       ,true),
 		 ?RULE(?T("if Guards@@@ -> Body@@@ end"),
 		       begin
 			   Loc = api_refac:start_end_loc(_This@),
 			   LocString = get_loc_string(_This@),
-			   GuardList@@@ = lists:flatten(lists:map(fun(G) -> wrangler_syntax:revert_forms(G) end, Guards@@@)),
+			   %%GuardList@@@ = lists:flatten(lists:map(fun(G) -> io:format("G: ~p~n", [G]), wrangler_syntax:revert_forms(G) end, Guards@@@)),
 			   VarList = lists:flatten(lists:map(fun(G) -> api_refac:free_var_names(G) end, Guards@@@)),
 			   VarListString = re:replace(lists:flatten(io_lib:format("~p", [VarList])),"'","",[{return,list},global]),
-			   Declare = {if_expr,VarList,GuardList@@@},
+			   Declare = {if_expr,VarList,Guards@@@},
 			   smother_server:declare(File,Loc,Declare),
 			   ?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
 		       end
@@ -70,9 +78,9 @@ instrument(File) ->
 			   VarList = lists:flatten(lists:map(fun(G) -> api_refac:free_var_names(G) end, Guards@@@)),
 			   VarListString = re:replace(lists:flatten(io_lib:format("~p", [VarList])),"'","",[{return,list},global]),
 
-			   Declare = {case_expr,ExprStx,VarList,lists:zip(PatList,GuardList)},
+			   Declare = {case_expr,ExprStx,VarList,lists:zip(Pats@@@,Guards@@@)},
 			   smother_server:declare(File,Loc,Declare),
-			   ?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[Expr@@ | " ++ VarListString ++ "]), case Expr@@ of Pats@@@ when Guards@@@ -> Body@@@ end end")
+			   ?TO_AST("begin EVal = Expr@@, VarList = [EVal | " ++ VarListString ++ "], smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",VarList), case EVal of Pats@@@ when Guards@@@ -> Body@@@ end end")
 		       end
 		       ,true)
 		], 
@@ -85,33 +93,3 @@ get_loc_string(_This@) ->
 get_arg_names(Args@@) ->
     lists:flatten("[" ++ "\"" ++ re:replace(?PP(Args@@), ",", "\",\"", [{return,list},global]) ++ "\"" ++ "]").
 
-%% Convert a pretty printed code string into a form suitable for compiling
-
-get_forms(Code) ->
-    {ok, Ts, _} = erl_scan:string(Code),
-    {MTs,ETs,FTs} = sift_terms(split_exprs(Ts,[],[]),{[],[],[]}),
-    {ok,MFs} =  erl_parse:parse_form(MTs),
-    {ok,EFs} =  erl_parse:parse_form(ETs),
-    {ok,FFs} =  erl_parse:parse_form(FTs),
-    {MFs,EFs,FFs}.
-
-sift_terms([],{MTs,ETs,FTs}) ->
-    {
-      lists:flatten(lists:reverse(MTs))
-      ,lists:flatten(lists:reverse(ETs))
-      ,lists:flatten(lists:reverse(FTs))
-    };
-sift_terms([[{'-',Line},{atom,Line,module}| _Mod] = M| More], {MTs,ETs,FTs}) ->
-    sift_terms(More, {[M | MTs], ETs, FTs});
-sift_terms([[{'-',Line},{atom,Line,export} | _Ex] = E| More], {MTs,ETs,FTs}) ->
-    sift_terms(More, {MTs, [E | ETs], FTs});
-sift_terms([F | More], {MTs,ETs,FTs}) ->
-    sift_terms(More, {MTs, ETs, [F | FTs]}).
-
-
-split_exprs([], Current, Results) ->
-    lists:reverse([Current | Results]);
-split_exprs([{dot,Line} | More], Current, Results) ->
-    split_exprs(More, [], [lists:reverse([{dot,Line}|Current]) | Results]);
-split_exprs([E | More], Current, Results) ->
-    split_exprs(More, [E | Current], Results).
