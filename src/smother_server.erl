@@ -35,11 +35,20 @@ handle_call({declare,File,Loc,Declaration},State) ->
 			%%io:format("Case Declaration:~n~p~n~p~n~p~n",[Expr,VarNames,Content]),
 			ExpRecords = lists:map(fun ?MODULE:build_pattern_record/1,Content),
 			lists:keystore(Loc,1,FDict,{Loc,{case_expr,Expr,VarNames,ExpRecords}});
-		    {fun_case,F,Arity,Args,Guard} ->
+		    {fun_case,F,Arity,Args,_Guard} ->
 			%%io:format("<~p, ~p> Function ~p/~p: ~p G:~p~n",[File,Loc,F,Arity,Args,Guard]),
 			%% ArgRecords = lists:map(fun ?MODULE:build_pattern_record/1,Args),
 			%%ArgRecords = build_pattern_record({fun_declaration,Loc,Args}),
-			ArgRecords = build_pattern_record(list_from_list(Args)),
+			ArgRecords = 
+			    case Args of 
+				[] ->
+				    {{StartLine,StartChar},{_EndLine,_EndChar}} = Loc,
+				    BStart = StartChar + length(atom_to_list(F)),
+				    BracketLoc = {{StartLine,BStart},{StartLine,BStart+1}},
+				    build_pattern_record({wrapper,nil,{attr,BracketLoc,[{range,BracketLoc}],none},{nil,BracketLoc}});
+				_ ->
+				    build_pattern_record(list_from_list(Args))
+			    end,
 			%%Find function declaration and add a pattern...
 			{OldLoc, {fun_expr,F,Arity,Patterns}} = 
 			    case lists:filter(fun({_Loc,Rec}) ->
@@ -111,7 +120,7 @@ handle_cast({log,File,Loc,LogData},State) ->
     if FDict == [] ->
 	    {noreply,State};
        true ->
-	    case lists:filter(fun({L,R}) -> within_loc(L,Loc) end, FDict) of
+	    case lists:filter(fun({L,_R}) -> within_loc(L,Loc) end, FDict) of
 		[] -> 
 		    io:format("No relevant condition for location ~p~n",[Loc]),
 		    {noreply,FDict};
@@ -193,7 +202,7 @@ start_if_needed() ->
     end.
 
 
-within_loc({{Sl,Sp},{El,Ep}} = Loc, {{SSl,SSp},{SEl,SEp}} = SubLoc) ->
+within_loc({{Sl,Sp},{El,Ep}} = _Loc, {{SSl,SSp},{SEl,SEp}} = _SubLoc) ->
     (
       (Sl < SSl)
       or ((Sl == SSl) and (Sp =< SSp))
@@ -229,7 +238,7 @@ apply_bool_log(Bindings,[#bool_log{}=Log | Es],All) ->
     
 get_bool_subcomponents([]) ->
     [];
-get_bool_subcomponents({tree,infix_expr,Attrs,{infix_expr,Op,Left,Right}}) ->
+get_bool_subcomponents({tree,infix_expr,_Attrs,{infix_expr,Op,Left,Right}}) ->
     {tree,operator,_OpAttrs,Image} = Op,
     case lists:any(fun(E) -> Image == E end,['and','or','xor']) of
 	true ->
@@ -258,7 +267,7 @@ get_pattern_subcomponents({wrapper,underscore,_Attrs,_Image}) ->
     [];
 get_pattern_subcomponents({fun_declaration,_Loc,Args}) ->
     Args;
-get_pattern_subcomponents(V) ->
+get_pattern_subcomponents(_V) ->
     %%io:format("UNKNOWN pattern expression type:~n~p~n~n", [V]),
     [].
 
@@ -290,20 +299,26 @@ build_pattern_record(E) ->
 
 apply_pattern_log(_EVal,[],_Bindings) ->
     [];
+apply_pattern_log(_EVal,[#pat_log{exp={wrapper,nil,_Attr,_Image}}=PatLog | Es],_Bindings) ->
+    [PatLog#pat_log{
+	   mcount=PatLog#pat_log.mcount+1
+	  } | Es];
 apply_pattern_log(EVal,[#pat_log{}=PatLog | Es],Bindings) ->
-    ValStx = erl_syntax:revert(erl_syntax:abstract(EVal)),
+    %%io:format("Reverting ~p~nAgainst: ~p~n~n",[EVal,PatLog]),
+    ValStx = abstract_revert(EVal),
     try
+	%%io:format("Reverting ~p~n~n",[PatLog#pat_log.exp]),
 	TrueExp = revert(PatLog#pat_log.exp),
 	%%io:format("Comparing ~p to pattern ~p~nFrom: ~p vs ~p~n", [ValStx,TrueExp,EVal,PatLog#pat_log.exp]),
 	
-	Comps = erl_eval:expr(erl_syntax:revert(erl_syntax:match_expr(TrueExp,ValStx)),Bindings),
+	_Comps = erl_eval:expr(erl_syntax:revert(erl_syntax:match_expr(TrueExp,ValStx)),Bindings),
 	%% Don't continue on the other patterns once a pattern matches, they should not show any evaluation
 	[PatLog#pat_log{
 	   mcount=PatLog#pat_log.mcount+1,
 	   matchedsubs=lists:map(fun(S) -> S#pat_log{mcount=S#pat_log.mcount+1} end,PatLog#pat_log.matchedsubs)
 	  } | Es]
     catch
-	error:Msg ->
+	error:_Msg ->
 	    %%io:format("No Match: ~p vs ~p~n~p~n",[revert(PatLog#pat_log.exp),ValStx,Msg]),
 	    case process_subs(PatLog,EVal,Bindings) of
 		{NewSubs,Extra} ->
@@ -313,9 +328,9 @@ apply_pattern_log(EVal,[#pat_log{}=PatLog | Es],Bindings) ->
 				PatLog#pat_log.extras;
 			    _ ->
 				case lists:keyfind(Extra,1,PatLog#pat_log.extras) of
-				    {Extra,ECount} ->
-					lists:keyreplace(Extra,1,PatLog#pat_log.extras,{Extra,ECount+1});
-				    false ->
+				    {Extra,EMCount,ENMCount} ->
+					lists:keyreplace(Extra,1,PatLog#pat_log.extras,{Extra,EMCount+1,ENMCount});
+				    _ ->
 					io:format("Unknown extra result: ~p~n",[Extra]),
 					PatLog#pat_log.extras
 				end
@@ -327,9 +342,9 @@ apply_pattern_log(EVal,[#pat_log{}=PatLog | Es],Bindings) ->
     end.
 
 %%process_subs(_E,[],_Eval,_Bindings) ->
-process_subs(#pat_log{exp={tree,tuple,_Attrs,Content}=Exp,subs=Subs},EVal,Bindings) ->
+process_subs(#pat_log{exp={tree,tuple,_Attrs,Content}=_Exp,subs=Subs},EVal,Bindings) ->
     %%io:format("Trying to evaluate ~p~n with ~p under ~p~n",[Exp,EVal,Bindings]),
-    case erl_syntax:revert(erl_syntax:abstract(EVal)) of
+    case abstract_revert(EVal) of
 	{tuple,_OLine,ValContent} ->
 	    if length(Content) /= length(ValContent) ->
 		    {Subs,tuple_size_mismatch};
@@ -350,13 +365,17 @@ process_subs(#pat_log{exp={tree,tuple,_Attrs,Content}=Exp,subs=Subs},EVal,Bindin
 	    %%io:format("~p is not a tuple...~n",[Val]),
 	    {Subs,not_a_tuple}
     end;
-process_subs(#pat_log{exp={wrapper,integer,_Attrs,_Image},subs=Subs}=S,EVal,Bindings) ->
+process_subs(#pat_log{exp={wrapper,integer,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
     {Subs,no_extras};
-process_subs(#pat_log{exp={tree,list,_Attrs,Content}=Exp,subs=Subs},EVal,Bindings) ->
-    case erl_syntax:revert(erl_syntax:abstract(EVal)) of
+process_subs(#pat_log{exp={wrapper,nil,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
+    {Subs,no_extras};
+process_subs(#pat_log{exp={tree,list,_Attrs,_Content},subs=Subs},EVal,Bindings) ->
+    case abstract_revert(EVal) of
 	{cons,_OLine,Head,ValContent} ->
 	    ContentList = [Head | list_to_list(ValContent)],
-	    if length(Subs) /= length(ContentList) ->
+	    if length(Subs) == 0 ->
+		    {Subs,non_empty_list};
+	       length(Subs) /= length(ContentList) ->
 		    {Subs,list_size_mismatch};
 	       true ->
 		    ZipList = lists:zip(Subs,ContentList),
@@ -370,12 +389,20 @@ process_subs(#pat_log{exp={tree,list,_Attrs,Content}=Exp,subs=Subs},EVal,Binding
 					   ),
 		    {NewSubs, no_extras}
 	       end;
+	{nil,_OLine} ->
+	    if length(Subs) /= 0 ->
+		    {Subs, empty_list};
+	       true ->
+		    {Subs, no_extras}
+	    end;
 	Val ->
 	    io:format("~p is not a list...~n",[Val]),
 	    {Subs,not_a_list}
     end;
-process_subs(#pat_log{exp={fun_declaration,Loc,Rec},subs=Subs},Eval,Bindings) ->
+process_subs(#pat_log{exp={fun_declaration,Loc,Rec},subs=Subs},_Eval,_Bindings) ->
     io:format("Fun pattern: ~p ~p~n",[Loc,Rec]),
+    {Subs,no_extras};
+process_subs(#pat_log{exp={wrapper,atom,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
     {Subs,no_extras};
 process_subs(#pat_log{subs=Subs}=S,EVal,Bindings) ->
     io:format("Don't know how to process sub: ~p~nwith ~p under ~p~n", [S,EVal,Bindings]),
@@ -387,7 +414,7 @@ make_extras({tree,list,_Attrs,none}) ->
     [{non_empty_list,0,0},{not_a_list,0,0}];
 make_extras({tree,list,_Attrs,{list,_,_}}) ->
     [{empty_list,0,0},{list_size_mismatch,0,0},{not_a_list,0,0}];
-make_extras(P) ->
+make_extras(_P) ->
     %%io:format("No extras for ~p~n",[P]),
     [].
 
@@ -419,7 +446,7 @@ revert(Exp) ->
 apply_fun_log(_Loc,_LogData,[]) ->
     [];
 apply_fun_log(Loc,LogData,[{Loc,Rec} | Ps]) ->
-    io:format("MATCH: ~p vs ~p~n",[LogData,Rec]),
+    %%io:format("MATCH: ~p vs ~p~n",[LogData,Rec]),
     NewSubs = hd(apply_pattern_log(LogData,[Rec],[])),
     %%ZipList = lists:zip(LogData,Subs),
     %% FIXME content
@@ -429,7 +456,7 @@ apply_fun_log(Loc,LogData,[{Loc,Rec} | Ps]) ->
 %%		       ZipList),
     [{Loc,NewSubs} | Ps];
 apply_fun_log(Loc,LogData,[{PreLoc,Rec} | Ps]) ->
-    io:format("NONMATCH: ~p vs ~p~n",[LogData,Rec]),
+    %%io:format("NONMATCH: ~p vs ~p~n",[LogData,Rec]),
     NewSubs = hd(apply_pattern_log(LogData,[Rec],[])),
 %%    ZipList = lists:zip(LogData,Subs),
     %% FIXME content
@@ -438,3 +465,17 @@ apply_fun_log(Loc,LogData,[{PreLoc,Rec} | Ps]) ->
 %%		       end,
 %%		       ZipList),
     [{PreLoc,NewSubs} | apply_fun_log(Loc,LogData,Ps)].
+
+
+abstract_revert(EVal) ->
+    try
+	erl_syntax:revert(erl_syntax:abstract(EVal))
+    catch
+	error:PIDMsg ->
+	    %% PID types can't ba abstracted
+	    %%io:format("PID problem: ~p~n",[PIDMsg]),
+	    %%{nil,0}
+	    {nil,0}
+    end.
+
+	

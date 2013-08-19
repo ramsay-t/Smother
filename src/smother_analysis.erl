@@ -90,7 +90,7 @@ analyse_to_html(IF,OF,FDict,{FLocLine,FLocChar} = FLoc) ->
 				      Report = make_report(Coverage),
 				      io:fwrite(OF,"~s",[Report])
 			      end, Starts),
-		    io:fwrite(OF,Data,[]),
+		    io:fwrite(OF,"~s",[Data]),
 		    lists:map(fun(_) -> io:fwrite(OF,"</span>",[]) end, Ends),
 		    analyse_to_html(IF,OF,FDict,{FLocLine,FLocChar+1})
 	    end;
@@ -217,19 +217,19 @@ make_msg(Status,Proportion,SubProportion,Reports) ->
 	    ""
     end.
 
-get_match_counts(Cond) ->
-    case Cond of
-	#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}},tcount=TCount} ->
-	    {TCount,-1};
-	#bool_log{} ->
-	    {Cond#bool_log.tcount,Cond#bool_log.fcount};
-	#pat_log{} ->
-	    {Cond#pat_log.mcount,Cond#pat_log.nmcount};
-	{merged,MC,NMC} ->
-	    {MC,NMC};
-	_ ->
-	    exit({"Unhandled record type", Cond})
-    end.
+%%get_match_counts(Cond) ->
+%%    case Cond of
+%%	#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}},tcount=TCount} ->
+%%	    {TCount,-1};
+%%	#bool_log{} ->
+%%	    {Cond#bool_log.tcount,Cond#bool_log.fcount};
+%%	#pat_log{} ->
+%%	    {Cond#pat_log.mcount,Cond#pat_log.nmcount};
+%%	{merged,MC,NMC} ->
+%%	    {MC,NMC};
+%%	_ ->
+%%	    exit({"Unhandled record type", Cond})
+%%    end.
 
 colourise(N) ->
     colourise(N,1).
@@ -254,7 +254,7 @@ get_analysis(FDict,FLoc) ->
 	[] ->
 	    none;
 	List ->
-	    {conditions,lists:flatten(lists:map(fun({{Start,End}, Cond}) ->
+	    {conditions,lists:flatten(lists:map(fun({{_Start,_End}, Cond}) ->
 							%% The Dict entires always have the 
 							%% declared content as the last component,
 							%% except function cases, which are a bit weirder...
@@ -347,14 +347,12 @@ merge_branches(M,NM) ->
     [].
 
 %% Measures coverage and returns a quad: {Match count, NonMatch count, Subs average matched, Subs average unmatched}
-measure_coverage(#bool_log{exp={wrapper,atom,Attrs,{atom,_Loc,true}}=Exp,tcount=TCount}) ->
-    Report = #analysis_report{
-		exp=?PP(Exp),
-		matched=TCount,
-		nonmatched=-1
-	       };
-    %% true never needs to be falsified...
-    %%{if TCount > 0 -> 1; true -> 0 end,1};
+measure_coverage(#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}}=Exp,tcount=TCount}) ->
+    #analysis_report{
+       exp=?PP(Exp),
+       matched=TCount,
+       nonmatched=-1
+      };
 measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,exp={tree,infix_expr,_Attrs,{infix_expr,{tree,operator,_OpAttrs,Image},_Left,_Right}}=Exp}) ->
     MSubs = lists:map(fun measure_coverage/1, TSubs),
     NMSubs = lists:map(fun measure_coverage/1, FSubs),
@@ -378,7 +376,7 @@ measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,e
 measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,exp=Exp}) ->
     MSubs = lists:map(fun measure_coverage/1, TSubs),
     NMSubs = lists:map(fun measure_coverage/1, FSubs),
-    Report = #analysis_report{
+    #analysis_report{
 		exp=?PP(Exp),
 		matched=TCount,
 		nonmatched=FCount,
@@ -388,23 +386,30 @@ measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,e
 		nmsubsproportion=coverage_average(NMSubs)
 	       };
 measure_coverage(#pat_log{mcount=MCount,exp={wrapper,underscore,_Attrs,_Image}=Exp}) ->
-        Report = #analysis_report{
-		    exp=?PP(Exp),
-		    type=pat,
-		    matched=MCount,
-		    nonmatched=-1
-		   };
+    #analysis_report{
+       exp=?PP(Exp),
+       type=pat,
+       matched=MCount,
+       nonmatched=-1
+      };
 measure_coverage(#pat_log{mcount=MCount,exp={wrapper,variable,_Attrs,_Image}=Exp}) ->
-        Report = #analysis_report{
-		    exp=?PP(Exp),
-		    type=pat,
-		    matched=MCount,
-		    nonmatched=-1
-		   };
+    #analysis_report{
+       exp=?PP(Exp),
+       type=pat,
+       matched=MCount,
+       nonmatched=-1
+      };
+measure_coverage(#pat_log{mcount=MCount,exp={wrapper,nil,_Attrs,_Image}=Exp}) ->
+    #analysis_report{
+       exp=?PP(Exp),
+       type=pat,
+       matched=MCount,
+       nonmatched=-1
+      };
 measure_coverage(#pat_log{mcount=MCount,nmcount=NMCount,subs=Subs,extras=Extras,exp=Exp}) ->
     NMSubs = lists:map(fun measure_coverage/1, Subs),
     ESubs = lists:map(fun measure_coverage/1, Extras),
-    Report = #analysis_report{
+    #analysis_report{
 		exp=?PP(Exp),
 		type=pat,
 		matched=MCount,
@@ -444,26 +449,26 @@ coverage_average(List) ->
 	    Res / LL
     end.
 
-html_encode(P) ->
-    html_encode_string(lists:flatten(io_lib:format("~p", [P]))).
+%%html_encode(P) ->
+%%    html_encode_string(lists:flatten(io_lib:format("~p", [P]))).
 
-html_encode_string([]) ->
-    [];
-html_encode_string([34 | More]) ->
-    "&quot;" ++ html_encode_string(More);
-html_encode_string([60 | More]) ->
-    "&lt;" ++ html_encode_string(More);
-html_encode_string([62 | More]) ->
-    "&gt;" ++ html_encode_string(More);
-html_encode_string([C | More]) ->
-    [C | html_encode_string(More)].
+%%html_encode_string([]) ->
+%%    [];
+%%html_encode_string([34 | More]) ->
+%%    "&quot;" ++ html_encode_string(More);
+%%html_encode_string([60 | More]) ->
+%%    "&lt;" ++ html_encode_string(More);
+%%html_encode_string([62 | More]) ->
+%%    "&gt;" ++ html_encode_string(More);
+%%html_encode_string([C | More]) ->
+%%    [C | html_encode_string(More)].
 
 get_range({attr,_ALoc,Attrs,_}) ->
     {range, Rng} = lists:keyfind(range,1,Attrs),
     Rng;
 get_range({Record,_Item,Attrs,_Exp}) ->
     case Attrs of
-	{attr,_ALoc,As,_} ->
+	{attr,_ALoc,_As,_} ->
 	    get_range(Attrs);
 	_ ->
 	    io:format("Er, whut? ~p~n~p~n~n",[Record,Attrs]),

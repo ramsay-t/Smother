@@ -1,23 +1,31 @@
 -module(smother).
--export([compile/1,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1]).
+-export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1]).
 
 -include("include/install.hrl").
 
 compile(Filename) ->
+    compile(Filename,[]).
+
+compile(Filename,Includes) ->
     wrangler_ast_server:start_ast_server(),
     smother_server:clear(Filename),
-    %%{ok,AST} = api_refac:get_ast(Filename),
     {ok, [{{Filename, Filename}, AST2}]} = instrument(Filename),
     Code = ?PP(AST2),
-    %%io:format("Transformed code to~n~s~n", [Code]),
-    {MFs,EFs,FTs} = smother_annotater:get_forms(Code),
-    %Forms = wrangler_syntax:revert_forms(AST2),
-    %%io:format("~n~nForms:~p~n~n",[{MFs,EFs,FTs}]),
-    case compile:forms([MFs,EFs,FTs],[debug_info]) of
+
+    {ok, ModInfo} = api_refac:get_module_info(Filename),
+    {module,ModName} = lists:keyfind(module,1,ModInfo),
+
+    TmpFile = smother_annotater:make_tmp_file(ModName,Code),
+    {ok,Forms} = epp:parse_file(TmpFile,Includes,[]),
+
+    %%{MFs,EFs,FTs} = smother_annotater:get_forms(TmpFile,Includes),
+    %%case compile:forms([MFs,EFs,FTs],[debug_info]) of
+    %%case compile:file(TmpFile,[binary,debug_info]) of
+    case compile:forms(Forms,[binary,debug_info]) of
 	{ok,Module,Binary} ->
 	    code:load_binary(Module,Filename,Binary);
-	_Error ->
-	    exit("Failed to compile the transformed module.")
+	Error ->
+	    exit({"Failed to compile the transformed module.",Error})
     end.
 
 analyse(File) ->
@@ -62,17 +70,6 @@ instrument(File) ->
 		       begin
 			   Loc = api_refac:start_end_loc(_This@),
 			   LocString = get_loc_string(_This@),
-
-			   GuardList = lists:map(fun(G) -> 
-							 case wrangler_syntax:revert_forms(G) of 
-							     [] -> {atom,0,true}; 
-							     GG -> GG 
-							 end 
-						 end, Guards@@@),
-			   PatList = lists:map(fun(G) -> 
-						       hd(wrangler_syntax:revert_forms(G))
-					       end, Pats@@@),
-
 			   ExprStx = hd(lists:flatten(wrangler_syntax:revert_forms(Expr@@))),
 
 			   VarList = lists:flatten(lists:map(fun(G) -> api_refac:free_var_names(G) end, Guards@@@)),
@@ -89,7 +86,4 @@ instrument(File) ->
 get_loc_string(_This@) ->
     Loc = api_refac:start_end_loc(_This@),
     lists:flatten(io_lib:format("~p", [Loc])).
-
-get_arg_names(Args@@) ->
-    lists:flatten("[" ++ "\"" ++ re:replace(?PP(Args@@), ",", "\",\"", [{return,list},global]) ++ "\"" ++ "]").
 
