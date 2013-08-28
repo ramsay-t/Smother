@@ -145,10 +145,14 @@ handle_call({analyse,File,Loc},State) ->
 handle_call({analyse_to_file,File,Outfile},State) ->
     case lists:keyfind(File,1,State) of
 	{File,FDict} ->
-	    {ok, OF} = file:open(Outfile, [write]),
-	    Result = smother_analysis:make_html_analysis(File,FDict,OF),
-	    file:close(OF),
-	    {reply,{Result,Outfile},State};
+	    case file:open(Outfile, [write]) of
+		{ok, OF} ->
+		    Result = smother_analysis:make_html_analysis(File,FDict,OF),
+		    file:close(OF),
+		    {reply,{Result,Outfile},State};
+		Error ->
+		    {reply,{error,Error},State}
+	    end;
 	_ ->
 	    {reply,{error,no_record_found,File},State}
     end;
