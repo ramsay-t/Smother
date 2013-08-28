@@ -8,7 +8,7 @@
 
 -record(pat_log,
 	{exp,
-	 guard={atom,0,'true'},
+	 guards=[],
 	 mcount=0,
 	 nmcount=0,
 	 subs=[],

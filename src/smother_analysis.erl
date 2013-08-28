@@ -275,6 +275,7 @@ get_analysis(FDict,FLoc) ->
     end.
 
 get_analysis_from_subs(Cond = #bool_log{},FLoc) ->
+    %%io:format("Analysing Guard for ~p: ~p~n", [FLoc,get_range(Cond#bool_log.exp)]),
     {Start, End} = get_range(Cond#bool_log.exp),
     SubConds = analyse_both_branches(
 		 lists:flatten(lists:map(fun(Sub) -> get_analysis_from_subs(Sub,FLoc) end, Cond#bool_log.tsubs))
@@ -298,6 +299,13 @@ get_analysis_from_subs(Cond = #pat_log{},FLoc) ->
     SubConds = analyse_both_branches(
 		 lists:flatten(lists:map(fun(Sub) -> get_analysis_from_subs(Sub,FLoc) end, Cond#pat_log.subs)),
 		 lists:flatten(lists:map(fun(Sub) -> get_analysis_from_subs(Sub,FLoc) end, Cond#pat_log.matchedsubs))),
+
+    %% Add Guards...
+    GuardItems = lists:flatten(lists:map(fun(G) -> 
+						 get_analysis_from_subs(G, FLoc)
+					 end,
+					 lists:flatten(Cond#pat_log.guards))
+			      ),
     R1 = 
 	if FLoc == End ->
 		[{condition_end} | SubConds];
@@ -309,7 +317,7 @@ get_analysis_from_subs(Cond = #pat_log{},FLoc) ->
 	   true ->
 		SubConds
 	end,
-    R1 ++ R2;
+    R1 ++ R2 ++ GuardItems;
 get_analysis_from_subs(Cond,_FLoc) ->
     io:format("UNHANDLED analysis sub: ~p~n",[Cond]),
     [].
@@ -464,8 +472,13 @@ coverage_average(List) ->
 %%    [C | html_encode_string(More)].
 
 get_range({attr,_ALoc,Attrs,_}) ->
-    {range, Rng} = lists:keyfind(range,1,Attrs),
-    Rng;
+   case lists:keyfind(range,1,Attrs) of
+        {range, Rng} ->
+	   Rng;
+       _ ->
+	   io:format("Couldn't get range from ~p~n",[Attrs]),
+	   {{0,0},{0,0}}
+   end;
 get_range({Record,_Item,Attrs,_Exp}) ->
     case Attrs of
 	{attr,_ALoc,_As,_} ->
@@ -473,5 +486,8 @@ get_range({Record,_Item,Attrs,_Exp}) ->
 	_ ->
 	    io:format("Er, whut? ~p~n~p~n~n",[Record,Attrs]),
 	    {{0,0},{0,0}}
-    end.
+    end;
+get_range(R) ->
+    io:format("Er, Whut? Getting range from something weird...~n~p~n", [R]), 
+    {{0,0},{0,0}}.
 

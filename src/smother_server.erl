@@ -5,7 +5,7 @@
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
 
--export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2]).
+-export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2,show_files/0]).
 -export([init/1,handle_call/2,handle_cast/2,terminate/2,handle_call/3,code_change/3,handle_info/2]).
 
 -export([build_pattern_record/1,build_bool_record/1,within_loc/2]).
@@ -16,67 +16,113 @@ init(Dict) ->
 handle_call(Action,_From,State) ->
     handle_call(Action,State).
 
+handle_call(show_files,State) ->
+    Files = lists:map(fun({File,FD}) -> File end, State),
+    {reply,Files,State};
 handle_call({clear,File},State) ->
     {reply,ok,lists:keystore(File,1,State,{File,[]})};
 handle_call({declare,File,Loc,Declaration},State) ->
+    %%io:format("Declaration in ~p~n",[File]),
     FDict = case lists:keyfind(File,1,State) of
 		false -> [];
 		{File, FD} -> FD
 	    end,
     FDict2 = 
-	case length(lists:filter(fun({L,_V}) -> within_loc(L,Loc) end, FDict)) of
-	    0 ->
-		case Declaration of
-		    {if_expr,VarNames,Content} ->
-			%%io:format("If Declaration:~n~p~n~p~n",[VarNames,Content]),
-			ExpRecords = lists:map(fun ?MODULE:build_bool_record/1,Content),
-			lists:keystore(Loc,1,FDict,{Loc,{if_expr,VarNames,ExpRecords}});
-		    {case_expr,Expr,VarNames,Content} ->
-			%%io:format("Case Declaration:~n~p~n~p~n~p~n",[Expr,VarNames,Content]),
-			ExpRecords = lists:map(fun ?MODULE:build_pattern_record/1,Content),
-			lists:keystore(Loc,1,FDict,{Loc,{case_expr,Expr,VarNames,ExpRecords}});
-		    {fun_case,F,Arity,Args,_Guard} ->
-			%%io:format("<~p, ~p> Function ~p/~p: ~p G:~p~n",[File,Loc,F,Arity,Args,Guard]),
-			%% ArgRecords = lists:map(fun ?MODULE:build_pattern_record/1,Args),
-			%%ArgRecords = build_pattern_record({fun_declaration,Loc,Args}),
-			ArgRecords = 
-			    case Args of 
-				[] ->
-				    {{StartLine,StartChar},{_EndLine,_EndChar}} = Loc,
-				    BStart = StartChar + length(atom_to_list(F)),
-				    BracketLoc = {{StartLine,BStart},{StartLine,BStart+1}},
-				    build_pattern_record({wrapper,nil,{attr,BracketLoc,[{range,BracketLoc}],none},{nil,BracketLoc}});
-				_ ->
-				    build_pattern_record(list_from_list(Args))
-			    end,
-			%%Find function declaration and add a pattern...
-			{OldLoc, {fun_expr,F,Arity,Patterns}} = 
-			    case lists:filter(fun({_Loc,Rec}) ->
-						      case Rec of
-							  {fun_expr,F,Arity,_Patterns} ->
-							      true;
-							  _ ->
-							      false
-						      end
+	case Declaration of
+	    {if_expr,VarNames,Content} ->
+
+		%% TODO: Wrangler now supports three layers of lists for ifs:
+		%% Patterns
+		%% Clauses
+		%% Components in clauses
+		%%
+		%% e.g.: 
+		%% if (A == 0), (B > 4); (C==1) ->
+		%%	B / 1;
+		%%   true ->
+		%%	B / A
+		%% end.
+		%% Has two patterns, (<Long-prop> and true)
+		%% The first pattern has two clauses ([[A == 0, B > 4],[C == 1]]),
+		%% The first clause has two components ([A == 0, B > 4])
+		%% 
+		%% This code currently flattens this out and so will only handle one 
+		%% clause and once component per pattern...
+		
+		%%io:format("If Declaration:~n~p~n~p~n",[VarNames,Content]),
+		%%io:format("IF declaration with ~p patterns ~p~n",[length(Content), Loc]),
+		ExpRecords = 
+		    lists:flatten(
+		    lists:map(fun(C) ->
+				      io:format("    Pattern with ~p components found~n", [length(C)]),
+				      R = lists:map(fun(Cc) -> 
+							    io:format("        Component with ~p clauses found~n", [length(Cc)]),
+							    Rr = lists:map(fun ?MODULE:build_bool_record/1, Cc),
+							    lists:map(fun(Rrr) -> 
+									      io:format("        ~p~n",[revert(Rrr#bool_log.exp)]) 
+								      end, 
+								      Rr),
+							    lists:flatten(Rr)
+						    end,
+						    C),
+				      
+				      R
+			      end,
+			      Content)
+		     ),
+		lists:keystore(Loc,1,FDict,{Loc,{if_expr,VarNames,ExpRecords}});
+	    {case_expr,Expr,VarNames,Content} ->
+		%%io:format("Case Declaration ~p~n",[Loc]),
+		ExpRecords = lists:map(fun ?MODULE:build_pattern_record/1,Content),
+		lists:keystore(Loc,1,FDict,{Loc,{case_expr,Expr,VarNames,ExpRecords}});
+	    {receive_expr,Content} ->
+		%%io:format("Recieve Declaration ~p~n~p~n",[Loc,Content]),
+		%%Patterns = lists:map(fun ?MODULE:build_pattern_record/1,Content),
+		Patterns = lists:map(fun({P,G}=C) ->
+					     %%io:format("Making record from ~p~n",[revert(hd(P))]),
+					     build_pattern_record(C)
+				     end,
+				     Content),
+		lists:keystore(Loc,1,FDict,{Loc,{receive_expr,Patterns}});
+	    {fun_case,F,Arity,Args,_Guard} ->
+		%%io:format("Fun declaration ~p/~p ~p~n",[F,Arity,Loc]),
+		%%io:format("<~p, ~p> Function ~p/~p: ~p G:~p~n",[File,Loc,F,Arity,Args,Guard]),
+		%% ArgRecords = lists:map(fun ?MODULE:build_pattern_record/1,Args),
+		%%ArgRecords = build_pattern_record({fun_declaration,Loc,Args}),
+		ArgRecords = 
+		    case Args of 
+			[] ->
+			    {{StartLine,StartChar},{_EndLine,_EndChar}} = Loc,
+			    BStart = StartChar + length(atom_to_list(F)),
+			    BracketLoc = {{StartLine,BStart},{StartLine,BStart+1}},
+			    build_pattern_record({wrapper,nil,{attr,BracketLoc,[{range,BracketLoc}],none},{nil,BracketLoc}});
+			_ ->
+			    build_pattern_record(list_from_list(Args))
+		    end,
+		%%Find function declaration and add a pattern...
+		{OldLoc, {fun_expr,F,Arity,Patterns}} = 
+		    case lists:filter(fun({_Loc,Rec}) ->
+					      case Rec of
+						  {fun_expr,F,Arity,_Patterns} ->
+						      true;
+						  _ ->
+						      false
 					      end
-					      ,FDict) of
-				[Rec] ->
-				    Rec;
-				[] ->
-				    {Loc,{fun_expr,F,Arity,[]}}
-			    end,
-			NewFRecord = {fun_expr,F,Arity,Patterns ++ [{Loc,ArgRecords}]},
-			%% This assumes declarations will arrive in order...
-			{Start,_End} = OldLoc,
-			{_NewStart,NewEnd} = Loc,
-			NewLoc = {Start,NewEnd},
-			lists:keystore(NewLoc,1,lists:keydelete(OldLoc,1,FDict),{NewLoc,NewFRecord});
-		    _D ->
-			io:format("Unknown smother declaration: ~p~n",[Declaration]),
-			FDict
-		end;
-	    _ ->
-		io:format("Decision point in ~p at ~p already declared~n", [File,Loc]),
+				      end
+				      ,FDict) of
+			[Rec] ->
+			    Rec;
+			[] ->
+			    {Loc,{fun_expr,F,Arity,[]}}
+		    end,
+		NewFRecord = {fun_expr,F,Arity,Patterns ++ [{Loc,ArgRecords}]},
+		%% This assumes declarations will arrive in order...
+		{Start,_End} = OldLoc,
+		{_NewStart,NewEnd} = Loc,
+		NewLoc = {Start,NewEnd},
+		lists:keystore(NewLoc,1,lists:keydelete(OldLoc,1,FDict),{NewLoc,NewFRecord});
+	    _D ->
+		io:format("Unknown smother declaration: ~p~n",[Declaration]),
 		FDict
 	end,
     {reply,ok,lists:keystore(File,1,State,{File,FDict2})};
@@ -120,10 +166,29 @@ handle_cast({log,File,Loc,LogData},State) ->
     if FDict == [] ->
 	    {noreply,State};
        true ->
-	    case lists:filter(fun({L,_R}) -> within_loc(L,Loc) end, FDict) of
+	    case lists:filter(fun({L,_R}) -> L == Loc end, FDict) of
 		[] -> 
-		    io:format("No relevant condition for location ~p~n",[Loc]),
-		    {noreply,FDict};
+		    %% No exact matches, so it could be a sub-pattern of a function
+		    case lists:filter(fun({L,_R}) -> within_loc(L,Loc) end, FDict) of
+			[{ParentLoc, {fun_expr,F,Arity,Patterns}}] ->
+			    NewPatterns = apply_fun_log(Loc,LogData,Patterns),
+			    NewFDict = lists:keystore(ParentLoc,1,FDict,{ParentLoc,{fun_expr,F,Arity,NewPatterns}}),
+			    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
+			D ->
+			    io:format("No relevant condition for location ~p~n",[Loc]),
+			    lists:map(fun({L,_R}) -> 
+					      io:format("    ~p vs ~p <~p>~n",[L, Loc, L == Loc])
+				      end, FDict),
+			    {noreply,State}
+		    end;
+		[{Loc, {receive_expr,Patterns}}] ->
+		    [EVal | Bindings] = LogData,
+		    NewPatterns = apply_pattern_log(EVal,Patterns,Bindings),
+		    %%io:format("Rec with value: ~p~n", [LogData]),
+		    %%NewPatterns = Patterns,
+		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{receive_expr,NewPatterns}}),
+		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
+			
 		[{Loc,{if_expr,VarNames,ExRecords}}] ->
 		    %io:format("Logging instance for ~p at ~p: ~p~n",[File,Loc,LogData]),
 		    Bindings = lists:zip(VarNames,LogData),
@@ -143,7 +208,7 @@ handle_cast({log,File,Loc,LogData},State) ->
 		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
 		D ->
 		    io:format("Unknown declaration: ~p~n", [D]),
-		    {noreply,lists:keystore(File,1,State,{File,FDict})}
+		    {noreply,State}
 	    end
     end;
 handle_cast(M,S) ->
@@ -162,6 +227,10 @@ code_change(_OldVsn,State,_Extra) ->
 
 
 %% API functions
+
+show_files() ->
+    start_if_needed(),
+    gen_server:call({global,smother_server}, show_files).
 
 analyse(File) ->
     start_if_needed(),
@@ -214,8 +283,7 @@ within_loc({{Sl,Sp},{El,Ep}} = _Loc, {{SSl,SSp},{SEl,SEp}} = _SubLoc) ->
 apply_bool_log(_Bindings,[],_All) ->
     [];
 %%apply_bool_log(Bindings,[{E,TCount,FCount,TSubs,FSubs} | Es]) ->
-apply_bool_log(Bindings,[#bool_log{}=Log | Es],All) ->
-    %% Wrangler expects everything to be lists of things...
+apply_bool_log(Bindings,[#bool_log{}=Log | Es],All) ->   
     E = revert(Log#bool_log.exp),
     %%io:format("Evaluating:~n~p~nUnder: ~p~n",[E,Bindings]),
     {value,Eval,_} = erl_eval:expr(E,Bindings),
@@ -247,9 +315,12 @@ get_bool_subcomponents({tree,infix_expr,_Attrs,{infix_expr,Op,Left,Right}}) ->
 	    []
     end;
 get_bool_subcomponents([_V | _VMore] = VList) ->
-    io:format("Got a list with ~p elements...~n", [length(VList)]),
+    %%io:format("Got a list with ~p elements...~n", [length(VList)]),
+    %% FIXME comma,semicolon syntax.....
     [];
 get_bool_subcomponents({wrapper,atom,_Attrs,_Atom}) ->
+    [];
+get_bool_subcomponents({atom,_Line,true}) ->
     [];
 get_bool_subcomponents(V) ->
     VList = tuple_to_list(V),
@@ -265,37 +336,50 @@ get_pattern_subcomponents({tree,list,_Attrs,{list,[Head],Tail}}) ->
     [Head | get_pattern_subcomponents(Tail)];
 get_pattern_subcomponents({wrapper,underscore,_Attrs,_Image}) ->	
     [];
+get_pattern_subcomponents({wrapper,variable,_Attrs,_Image}) ->	
+    [];
+get_pattern_subcomponents({wrapper,nil,_Attrs,_Image}) ->	
+    [];
 get_pattern_subcomponents({fun_declaration,_Loc,Args}) ->
     Args;
-get_pattern_subcomponents(_V) ->
+get_pattern_subcomponents(V) ->
     %%io:format("UNKNOWN pattern expression type:~n~p~n~n", [V]),
     [].
 
-build_bool_record([E]) ->
-    Subs = lists:map(fun ?MODULE:build_bool_record/1,get_bool_subcomponents(E)),
-    #bool_log{exp=E,tsubs=Subs,fsubs=Subs};
 build_bool_record(E) ->
     Subs = lists:map(fun ?MODULE:build_bool_record/1,get_bool_subcomponents(E)),
     #bool_log{exp=E,tsubs=Subs,fsubs=Subs}.
 
-build_pattern_record({[E],[]}) ->
-    build_pattern_record({[E],[{atom,0,'true'}]});
-build_pattern_record({[E],[G]}) ->
+build_pattern_record({[E],Gs}) ->
     %%io:format("PairHIT:~p~n",[{E,G}]),
     Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
     Extras = make_extras(E),
-    #pat_log{exp=E,guard=G,subs=Subs,extras=Extras,matchedsubs=Subs};
+    GuardPats = lists:map(fun(G) ->
+				  lists:map(fun build_bool_record/1, G)
+			  end,
+			  Gs),
+    #pat_log{exp=E,guards=GuardPats,subs=Subs,extras=Extras,matchedsubs=Subs};
 build_pattern_record([E]) ->
+    %%io:format("No guards...?~n"),
     %%io:format("HIT:~p~n",[E]),
     Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs};
 build_pattern_record(E) ->
+    %%io:format("No guards...?~n"),
     %%io:format("Single HIT:~p~n",[E]),
     Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs}.
 
+
+add_match([]) ->
+    [];
+add_match([S | Ss]) ->
+    [ S#pat_log{
+	mcount=S#pat_log.mcount+1,
+	matchedsubs=add_match(S#pat_log.matchedsubs)
+       } | add_match(Ss)].
 
 apply_pattern_log(_EVal,[],_Bindings) ->
     [];
@@ -309,16 +393,31 @@ apply_pattern_log(EVal,[#pat_log{}=PatLog | Es],Bindings) ->
     try
 	%%io:format("Reverting ~p~n~n",[PatLog#pat_log.exp]),
 	TrueExp = revert(PatLog#pat_log.exp),
-	%%io:format("Comparing ~p to pattern ~p~nFrom: ~p vs ~p~n", [ValStx,TrueExp,EVal,PatLog#pat_log.exp]),
+	%%io:format("Comparing ~p to pattern ~p~n", [EVal,TrueExp]),
 	
 	_Comps = erl_eval:expr(erl_syntax:revert(erl_syntax:match_expr(TrueExp,ValStx)),Bindings),
-	%% Don't continue on the other patterns once a pattern matches, they should not show any evaluation
-	[PatLog#pat_log{
-	   mcount=PatLog#pat_log.mcount+1,
-	   matchedsubs=lists:map(fun(S) -> S#pat_log{mcount=S#pat_log.mcount+1} end,PatLog#pat_log.matchedsubs)
-	  } | Es]
+
+	%% Now check for guard matches...
+	%%io:format("Pattern match, now need to match ~p guards under ~p...~n",[length(PatLog#pat_log.guards), Bindings]),
+	{Result,NewGuards} = match_guards(PatLog#pat_log.guards,Bindings),
+
+	NewPat = PatLog#pat_log{
+		   mcount=PatLog#pat_log.mcount+1,
+		   matchedsubs=add_match(PatLog#pat_log.matchedsubs),
+		   guards=NewGuards
+		  },
+
+	%%io:format("Pattern MATCH, Guards: ~p~n",[Result]),
+	case Result of
+	    ok ->
+		%% Don't continue on the other patterns once a pattern matches, they should not show any evaluation
+		[NewPat | Es];
+	    _ ->
+		[NewPat | apply_pattern_log(EVal,Es,Bindings)]
+	end
     catch
-	error:_Msg ->
+	error:Msg ->
+	    %%io:format("Non-Match!  ~p~n",[Msg]),
 	    %%io:format("No Match: ~p vs ~p~n~p~n",[revert(PatLog#pat_log.exp),ValStx,Msg]),
 	    case process_subs(PatLog,EVal,Bindings) of
 		{NewSubs,Extra} ->
@@ -340,6 +439,32 @@ apply_pattern_log(EVal,[#pat_log{}=PatLog | Es],Bindings) ->
 		    exit({"Unexpected result from process_subs",Err})
 	    end
     end.
+
+match_guards([],_Bindings) ->
+    {ok, []};
+match_guards([#bool_log{}=G | Gs], Bindings) ->
+    {SubRes, NewGs} = match_guards(Gs,Bindings),
+    NewLog = hd(apply_bool_log(Bindings,[G],true)),
+    if NewLog#bool_log.tcount > G#bool_log.tcount ->
+	    %% Matched...
+	    {SubRes, [NewLog | NewGs]};
+       true ->
+	    %% Didn't match...
+	    {fail, [NewLog | NewGs]}
+    end;
+match_guards([Gs],Bindings) ->
+    match_guards(Gs, Bindings);
+match_guards([Gs | MoreGs],Bindings) ->
+    {LeftRes, NewLeft} = match_guards(Gs, Bindings),
+    {RightRes, NewRight} = match_guards(MoreGs, Bindings),
+    if LeftRes == ok; 
+       RightRes == ok ->
+	    {ok, [NewLeft| NewRight]};
+       true ->
+	    {fail, [NewLeft | NewRight]}
+    end;
+match_guards(G, _Bindings) ->
+    io:format("Wait, what...? ~p~n",[G]).
 
 %%process_subs(_E,[],_Eval,_Bindings) ->
 process_subs(#pat_log{exp={tree,tuple,_Attrs,Content}=_Exp,subs=Subs},EVal,Bindings) ->
@@ -405,7 +530,7 @@ process_subs(#pat_log{exp={fun_declaration,Loc,Rec},subs=Subs},_Eval,_Bindings) 
 process_subs(#pat_log{exp={wrapper,atom,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
     {Subs,no_extras};
 process_subs(#pat_log{subs=Subs}=S,EVal,Bindings) ->
-    io:format("Don't know how to process sub: ~p~nwith ~p under ~p~n", [S,EVal,Bindings]),
+    %%io:format("Don't know how to process sub: ~p~nwith ~p under ~p~n", [revert(S#pat_log.exp),EVal,Bindings]),
     {Subs,no_extras}.
 
 make_extras({tree,tuple,_,_}) ->
@@ -439,8 +564,23 @@ list_from_list([Item|More]) ->
     NewLoc = {IStart,EndLoc},
     {tree,list,{attr,NewLoc,[{range,NewLoc}],none},{list,[Item],list_from_list(More)}}.
 
+fix_ints({integer,Line,Image}) ->
+    %% This will crash with non-standard ints such as 16#42 and stuff
+    {integer,Line,list_to_integer(Image)};
+fix_ints({op,Line,Image,Left,Right}) ->
+    {op,Line,Image,fix_ints(Left),fix_ints(Right)};
+fix_ints({cons,Line,Head,Tail}) ->
+    {cons,Line,fix_ints(Head),fix_ints(Tail)};
+fix_ints({tuple,Line,Content}) ->
+    {tuple,Line,[fix_ints(C) || C <- Content]};
+fix_ints({var,Line,Image}) ->
+    {var,Line,Image};
+fix_ints(E) ->
+    %%io:format("Can't fix ints in ~p~n",[E]),
+    E.
+
 revert(Exp) ->
-    hd(wrangler_syntax:revert_forms([Exp])).
+    fix_ints(wrangler_syntax:revert(Exp)).
 
 
 apply_fun_log(_Loc,_LogData,[]) ->
@@ -467,14 +607,26 @@ apply_fun_log(Loc,LogData,[{PreLoc,Rec} | Ps]) ->
     [{PreLoc,NewSubs} | apply_fun_log(Loc,LogData,Ps)].
 
 
+de_pid(EVal) ->
+    if is_pid(EVal) ->
+	    lists:flatten(io_lib:format("~p",[EVal]));
+       is_list(EVal) ->
+	    [de_pid(EV) || EV <- EVal];
+       is_tuple(EVal) ->
+	    list_to_tuple([de_pid(EV) || EV <- tuple_to_list(EVal)]);
+       true ->
+	    EVal
+    end.
+
 abstract_revert(EVal) ->
     try
-	erl_syntax:revert(erl_syntax:abstract(EVal))
+	DP = de_pid(EVal),
+	%%io:format("reverting ~p~n",[DP]),
+	erl_syntax:revert(erl_syntax:abstract(DP))
     catch
 	error:PIDMsg ->
-	    %% PID types can't ba abstracted
-	    %%io:format("PID problem: ~p~n",[PIDMsg]),
-	    %%{nil,0}
+	    %% PID types can't be abstracted
+	    io:format("PID problem: ~p~n",[PIDMsg]),
 	    {nil,0}
     end.
 
