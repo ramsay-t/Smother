@@ -1,1 +1,1 @@
--include("../wrangler/include/wrangler.hrl").
+-include("deps/wrangler/include/wrangler.hrl").
