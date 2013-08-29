@@ -7,8 +7,11 @@ default: all
 	$(SED) -i.tmp 's|-include(".*wrangler/include/wrangler.hrl")\.|-include("$(WRANGLER_ROOT)/include/wrangler.hrl")\.|' include/install.hrl
 	rm include/*.tmp
 
-ebin/%.beam: src/%.erl
+ebin/%.beam: src/%.erl ebin
 	erlc -o ebin $(LIBS) $<
+
+ebin:
+	mkdir -p ebin
 
 clean:
 	rm ebin/*
