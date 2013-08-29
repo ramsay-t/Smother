@@ -3,7 +3,9 @@ LIBS=-pa $(WRANGLER_ROOT)/ebin
 SOURCES=$(wildcard src/*.erl)
 SED=sed
 
-default: all
+default: header compile
+
+header:
 	$(SED) -i.tmp 's|-include(".*wrangler/include/wrangler.hrl")\.|-include("$(WRANGLER_ROOT)/include/wrangler.hrl")\.|' include/install.hrl
 	rm include/*.tmp
 
@@ -19,6 +21,6 @@ $(WRANGLER_ROOT):
 clean:
 	rm ebin/*
 
-all: $(patsubst src/%.erl,ebin/%.beam,$(SOURCES))
+compile: $(patsubst src/%.erl,ebin/%.beam,$(SOURCES))
 
 
