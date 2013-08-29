@@ -1,15 +1,17 @@
 WRANGLER_ROOT=deps/wrangler
 LIBS=-pa $(WRANGLER_ROOT)/ebin
 SOURCES=$(wildcard src/*.erl)
+OBJS=$(patsubst src/%.erl,ebin/%.beam, $(SOURCES))
 SED=sed
+VPATH=src
 
-default: header compile
+all: header ebin $(WRANGLER_ROOT) $(OBJS)
 
 header:
-	$(SED) -i.tmp 's|-include(".*wrangler/include/wrangler.hrl")\.|-include("$(WRANGLER_ROOT)/include/wrangler.hrl")\.|' include/install.hrl
-	rm include/*.tmp
+	@$(SED) -i.tmp 's|-include(".*wrangler/include/wrangler.hrl")\.|-include("$(WRANGLER_ROOT)/include/wrangler.hrl")\.|' include/install.hrl
+	@rm include/*.tmp
 
-ebin/%.beam: src/%.erl ebin $(WRANGLER_ROOT)
+ebin/%.beam: %.erl
 	erlc -o ebin $(LIBS) $<
 
 ebin:
@@ -21,6 +23,5 @@ $(WRANGLER_ROOT):
 clean:
 	rm ebin/*
 
-compile: $(patsubst src/%.erl,ebin/%.beam,$(SOURCES))
 
 
