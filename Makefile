@@ -5,23 +5,30 @@ OBJS=$(patsubst src/%.erl,ebin/%.beam, $(SOURCES))
 SED=sed
 VPATH=src
 
-all: header ebin $(WRANGLER_ROOT) $(OBJS)
+all: header compile $(WRANGLER_ROOT) $(OBJS)
 
 header:
 	@$(SED) -i.tmp 's|-include(".*wrangler/include/wrangler.hrl")\.|-include("$(WRANGLER_ROOT)/include/wrangler.hrl")\.|' include/install.hrl
 	@rm include/*.tmp
 
-ebin/%.beam: %.erl
-	erlc -o ebin $(LIBS) $<
+compile: deps
+	./rebar compile
 
-ebin:
-	mkdir -p ebin
+deps:
+	./rebar get-deps
 
-$(WRANGLER_ROOT):
-	mkdir -p deps && cd deps && git clone https://github.com/RefactoringTools/wrangler.git
+doc:
+	./rebar skip_deps=true doc
+
+xref:
+	./rebar skip_deps=true xref
 
 clean:
-	rm ebin/*
+	./rebar clean
 
+test:
+	./rebar skip_deps=true eunit
+
+.PHONY: test
 
 
