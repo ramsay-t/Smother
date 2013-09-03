@@ -187,6 +187,7 @@ handle_cast({log,File,Loc,LogData},State) ->
 		    end;
 		[{Loc, {receive_expr,Patterns}}] ->
 		    [EVal | Bindings] = LogData,
+		    %%io:format("~nGot a recieve with EVal ~p and Bindings ~p~n",[EVal, Bindings]),
 		    NewPatterns = apply_pattern_log(EVal,Patterns,Bindings),
 		    %%io:format("Rec with value: ~p~n", [LogData]),
 		    %%NewPatterns = Patterns,
@@ -391,19 +392,24 @@ apply_pattern_log(_EVal,[#pat_log{exp={wrapper,nil,_Attr,_Image}}=PatLog | Es],_
     [PatLog#pat_log{
 	   mcount=PatLog#pat_log.mcount+1
 	  } | Es];
-apply_pattern_log(EVal,[#pat_log{}=PatLog | Es],Bindings) ->
+apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | Es],Bindings) ->
     %%io:format("Reverting ~p~nAgainst: ~p~n~n",[EVal,PatLog]),
     ValStx = abstract_revert(EVal),
     try
 	%%io:format("Reverting ~p~n~n",[PatLog#pat_log.exp]),
-	TrueExp = revert(PatLog#pat_log.exp),
+	TrueExp = revert(Exp),
 	%%io:format("Comparing ~p to pattern ~p~n", [EVal,TrueExp]),
 	
 	_Comps = erl_eval:expr(erl_syntax:revert(erl_syntax:match_expr(TrueExp,ValStx)),Bindings),
 
 	%% Now check for guard matches...
 	%%io:format("Pattern match, now need to match ~p guards under ~p...~n",[length(PatLog#pat_log.guards), Bindings]),
-	{Result,NewGuards} = match_guards(PatLog#pat_log.guards,Bindings),
+	{Result,NewGuards} = 
+	    try 
+		match_guards(Guards,Bindings)
+	    catch error:{unbound_var,_} ->
+		    {fail,Guards}
+	    end,
 
 	NewPat = PatLog#pat_log{
 		   mcount=PatLog#pat_log.mcount+1,
@@ -428,14 +434,14 @@ apply_pattern_log(EVal,[#pat_log{}=PatLog | Es],Bindings) ->
 		    NewExtras = 
 			case Extra of
 			    no_extras ->
-				PatLog#pat_log.extras;
+				Extras;
 			    _ ->
-				case lists:keyfind(Extra,1,PatLog#pat_log.extras) of
+				case lists:keyfind(Extra,1,Extras) of
 				    {Extra,EMCount,ENMCount} ->
-					lists:keyreplace(Extra,1,PatLog#pat_log.extras,{Extra,EMCount+1,ENMCount});
+					lists:keyreplace(Extra,1,Extras,{Extra,EMCount+1,ENMCount});
 				    _ ->
 					io:format("Unknown extra result: ~p~n",[Extra]),
-					PatLog#pat_log.extras
+					Extras
 				end
 			end,
 		    [PatLog#pat_log{nmcount=PatLog#pat_log.nmcount+1,subs=NewSubs,extras=NewExtras}| apply_pattern_log(EVal,Es,Bindings)];

@@ -12,7 +12,8 @@ compile(Filename,Includes) ->
     wrangler_ast_server:start_ast_server(),
     smother_server:clear(Filename),
     AST2 = instrument(Filename),
-    Code = ?PP(AST2),
+%%    Code = ?PP(AST2),
+    Code = wrangler_prettypr:print_ast('unix',AST2),
 
     {ok, ModInfo} = api_refac:get_module_info(Filename),
     {module,ModName} = lists:keyfind(module,1,ModInfo),
@@ -108,7 +109,7 @@ rules(File) ->
 	       %%NewBody@@ = sub_instrument(Body@@,rules(File)),
 	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[NewArgs@@]), Body@@;")
 	   end
-	   ,true),
+	   ,api_refac:type(_This@)/=attribute),
      ?RULE(?T("if Guards@@@ -> Body@@@ end"),
 	   begin
 	       %%io:format("IF RULE HIT~n"),
@@ -121,7 +122,7 @@ rules(File) ->
 	       smother_server:declare(File,Loc,Declare),
 	       ?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
 	   end
-	   ,true),
+	   ,api_refac:type(_This@)/=attribute),
      ?RULE(?T("case Expr@@ of Pats@@@ when Guards@@@ -> Body@@@ end"),
 	   begin
 	       %%io:format("CASE RULE HIT~n"),
@@ -137,7 +138,7 @@ rules(File) ->
 
 	       ?TO_AST("begin EVal = Expr@@, VarList = [EVal | " ++ VarListString ++ "], smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",VarList), case EVal of Pats@@@ when Guards@@@ -> Body@@@ end end")
 	   end
-	   ,true),
+	   ,api_refac:type(_This@)/=attribute),
      ?RULE(?T("receive Pats@@@ when Guards@@@ -> Body@@@ end"),
 	   begin
 	       %%io:format("RECEIVE RULE HIT~n"),
@@ -170,7 +171,7 @@ rules(File) ->
 
 	       ?TO_AST("receive NewPats@@@ when Guards@@@ -> NewBody@@@ end")
 	   end
-	   ,true)
+	   ,api_refac:type(_This@)/=attribute)
 
     ].
 	
