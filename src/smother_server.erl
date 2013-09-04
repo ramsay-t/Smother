@@ -530,6 +530,24 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content},subs=Subs},EVal,Bindings) 
 	       true ->
 		    {Subs, no_extras}
 	    end;
+	{string,Line,Content} ->
+	    if length(Subs) == 0 ->
+		    {Subs,non_empty_list};
+	       length(Subs) /= length(Content) ->
+		    {Subs,list_size_mismatch};
+	       true ->
+		    ZipList = lists:zip(Subs,Content),
+		    NewSubs = lists:flatten(lists:map(fun({S,VC}) ->
+							      %% VC will be char codes here so no need to normalise them...
+							      apply_pattern_log(
+								VC
+								,[S]
+								,Bindings)
+						      end,
+						      ZipList)
+					   ),
+		    {NewSubs, no_extras}
+	    end;
 	Val ->
 	    io:format("~p is not a list...~n",[Val]),
 	    {Subs,not_a_list}
