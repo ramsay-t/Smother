@@ -86,6 +86,18 @@ fix_range({Type,Thing,{attr,Loc,Attrs,End},Image},OldAttrs) ->
     NewAttrs = {attr,Loc,lists:keystore(range,1,Attrs,{range,Range}),End},
     {Type,Thing,NewAttrs,Image}.
 
+rename_underscores(A) ->
+    case A of 
+	{wrapper,underscore,Attrs,_Image} ->
+	    fix_range(?TO_AST("SMOTHER_UNDERSCORE_" ++ next_free_var_number()), Attrs);
+	{tree,tuple,Attrs,Contents} ->
+	    {tree,tuple,Attrs,lists:map(fun rename_underscores/1,Contents)};
+	{tree,list,Attrs,{list,Contents,Tail}} ->
+	    {tree,list,Attrs,{list,lists:map(fun rename_underscores/1,Contents),rename_underscores(Tail)}};
+	_ ->
+	    A 
+    end.
+
 rules(File) ->
     [
      ?RULE(?T("f@(Args@@) when Guard@@ -> Body@@;"),
@@ -96,14 +108,7 @@ rules(File) ->
 	       LocString = get_loc_string(_This@),
 	       FName = erl_parse:normalise(wrangler_syntax:revert(_W_f@)),
 	       reset_var_server(),
-	       NewArgs@@ = lists:map(fun(A) ->
-					     case A of 
-						 {wrapper,underscore,Attrs,_Image} ->
-						     fix_range(?TO_AST("SMOTHER_UNDERSCORE_" ++ next_free_var_number()), Attrs);
-						 _ ->
-						     A 
-					     end
-				   end, Args@@),
+	       NewArgs@@ = lists:map(fun rename_underscores/1, Args@@),
 	       Declare = {fun_case,FName,length(Args@@),Args@@,Guard@@},
 	       smother_server:declare(File,Loc,Declare),
 	       %%NewBody@@ = sub_instrument(Body@@,rules(File)),
