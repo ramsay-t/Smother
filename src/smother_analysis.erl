@@ -113,7 +113,7 @@ make_report(Coverage=#analysis_report{type=bool}) ->
 		    Coverage#analysis_report.nmsubsproportion,
 		    Coverage#analysis_report.nonmatchedsubs
 		   ),
-
+    
     Msg = lists:flatten(io_lib:format("<h3>~s</h3>
 <ul>
 <li>Matched: ~s times</li>
@@ -129,7 +129,8 @@ make_report(Coverage=#analysis_report{type=bool}) ->
 				       MatchMsg,
 				       NonMatchMsg
 				      ])),
-    lists:flatten(io_lib:format("<span class=\"condition ~p\" title=\"~s\">",[Class,Msg]));
+    DeQMsg = re:replace(Msg,"\"","\\&quot;",[{return,list},global]),
+    lists:flatten(io_lib:format("<span class=\"condition ~p\" title=\"~s\">",[Class,DeQMsg]));
 make_report(Coverage=#analysis_report{type=pat}) ->
     Class = determine_class(Coverage),
 
@@ -161,7 +162,8 @@ make_report(Coverage=#analysis_report{type=pat}) ->
 				       NonMatchMsg,
 				       ExtraMsg
 				      ])),
-    lists:flatten(io_lib:format("<span class=\"condition ~p\" title=\"~s\">",[Class,Msg])).
+    DeQMsg = re:replace(Msg,"\"","\\&quot;",[{return,list},global]),
+    lists:flatten(io_lib:format("<span class=\"condition ~p\" title=\"~s\">",[Class,DeQMsg])).
 
 determine_class(Coverage) ->
     if (Coverage#analysis_report.nonmatched == 0) and (Coverage#analysis_report.matched == 0) ->
