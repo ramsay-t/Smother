@@ -1,7 +1,7 @@
 -module(smother_analysis).
 -export([make_html_analysis/3,get_range/1]).
 
--include("include/install.hrl").
+-include_lib("wrangler/include/wrangler.hrl").
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
 

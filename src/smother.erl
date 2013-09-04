@@ -3,7 +3,7 @@
 
 -export([var_server/1]).
 
--include("include/install.hrl").
+-include_lib("wrangler/include/wrangler.hrl").
 
 compile(Filename) ->
     compile(Filename,[]).

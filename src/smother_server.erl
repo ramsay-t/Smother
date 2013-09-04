@@ -1,7 +1,7 @@
 -module(smother_server).
 -behaviour(gen_server).
 
--include("include/install.hrl").
+-include_lib("wrangler/include/wrangler.hrl").
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
 

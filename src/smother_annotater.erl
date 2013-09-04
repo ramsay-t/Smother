@@ -4,7 +4,7 @@
 
 -exports([annotate/2, get_forms/1, make_tmp_file/2]).
 
--include("include/install.hrl").
+-include_lib("wrangler/include/wrangler.hrl").
 
 annotate(_File, FDict) ->
     io:format("~p~n", [FDict]).
