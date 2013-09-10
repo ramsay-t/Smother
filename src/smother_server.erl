@@ -324,8 +324,8 @@ get_bool_subcomponents({atom,_Line,true}) ->
     [];
 get_bool_subcomponents(V) ->
     VList = tuple_to_list(V),
-    io:format("Expression with ~p elements, starting with {~p,~p,... ",[length(VList),lists:nth(1,VList),lists:nth(2,VList)]),
-    io:format("UNKNOWN bool expression type:~n~p~n~n", [V]),
+    %%io:format("Expression with ~p elements, starting with {~p,~p,... ",[length(VList),lists:nth(1,VList),lists:nth(2,VList)]),
+    %%io:format("UNKNOWN bool expression type:~n~p~n~n", [V]),
     [].
 
 get_pattern_subcomponents({tree,tuple,_Attrs,Content}) ->

@@ -502,10 +502,16 @@ get_zs(_V,[]) ->
     [];
 get_zs(V,[{Loc,{case_expr,_Expr,_VarNames,Content}} | More]) ->
     lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, Content)) ++ get_zs(V,More);
+get_zs(V,[{Loc,{if_expr,_VarNames,Content}} | More]) ->
+    lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, Content)) ++ get_zs(V,More);
+get_zs(V,[{Loc,{receive_expr,Content}} | More]) ->
+    lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, Content)) ++ get_zs(V,More);
 get_zs(V,[{Loc,{fun_expr,F,Arity,Patterns}} | More]) ->
     lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, lists:map(fun(P) -> element(2,P) end, Patterns))) ++ get_zs(V,More);
-get_zs(V,{Loc,C}) ->
+get_zs(V,C) ->
     exit({unimplemented_get_zs,C}). 
+
+ 
 
 get_z_leaves(V, #pat_log{exp=Exp,mcount=MCount,nmcount=NMCount,subs=NMSubs,extras=Extras}) ->
     MZs = z_context({matched,Exp},lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,Extras))),
