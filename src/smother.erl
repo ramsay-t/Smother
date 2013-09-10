@@ -1,5 +1,5 @@
 -module(smother).
--export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,show_files/0]).
+-export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1]).
 
 -export([var_server/1]).
 
@@ -196,3 +196,8 @@ get_loc_string(_This@) ->
     Loc = api_refac:start_end_loc(_This@),
     lists:flatten(io_lib:format("~p", [Loc])).
 
+
+get_zeros(File) ->
+    smother_server:get_zeros(File).
+get_nonzeros(File) ->
+    smother_server:get_nonzeros(File).

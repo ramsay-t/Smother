@@ -1,5 +1,5 @@
 -module(smother_analysis).
--export([make_html_analysis/3,get_range/1]).
+-export([make_html_analysis/3,get_range/1,get_zeros/1,get_nonzeros/1]).
 
 -include_lib("wrangler/include/wrangler.hrl").
 -include("include/eval_records.hrl").
@@ -449,8 +449,8 @@ coverage_average(List) ->
     if LL == 0 -> 1;
        true ->
 	    Res = lists:foldl(fun(Coverage,V) ->
-				      V1 = if Coverage#analysis_report.matched > 0 -> Coverage#analysis_report.msubsproportion; true -> 0 end,
-				      V2 = if Coverage#analysis_report.nonmatched > 0 -> Coverage#analysis_report.nmsubsproportion; true -> 0 end,
+				      V1 = if Coverage#analysis_report.matched > 0 -> Coverage#analysis_report.msubsproportion; Coverage#analysis_report.matched < 0 -> 1; true -> 0 end,
+				      V2 = if Coverage#analysis_report.nonmatched > 0 -> Coverage#analysis_report.nmsubsproportion; Coverage#analysis_report.nonmatched < 0 -> 1; true -> 0 end,
 				      N = (V1 + V2) / 2,
 				      N + V 
 			      end,
@@ -493,3 +493,79 @@ get_range(R) ->
     io:format("Er, Whut? Getting range from something weird...~n~p~n", [R]), 
     {{0,0},{0,0}}.
 
+get_zeros(A) ->
+  get_zs(zero,A).
+get_nonzeros(A) ->
+  get_zs(nonzero,A).
+
+get_zs(_V,[]) ->
+    [];
+get_zs(V,[{Loc,{case_expr,_Expr,_VarNames,Content}} | More]) ->
+    lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, Content)) ++ get_zs(V,More);
+get_zs(V,[{Loc,{fun_expr,F,Arity,Patterns}} | More]) ->
+    lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, lists:map(fun(P) -> element(2,P) end, Patterns))) ++ get_zs(V,More);
+get_zs(V,{Loc,C}) ->
+    exit({unimplemented_get_zs,C}). 
+
+get_z_leaves(V, #pat_log{exp=Exp,mcount=MCount,nmcount=NMCount,subs=NMSubs,extras=Extras}) ->
+    MZs = z_context({matched,Exp},lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,Extras))),
+    MZ = if (V == zero) and (MCount == 0) ->
+               [{never_matched,get_range(Exp),Exp,[]}];
+            (V /= zero) and (MCount > 0) ->
+               [{matched,get_range(Exp),Exp,[]}];
+           true ->
+	       []
+         end,
+    NMZs = z_context({non_matched,Exp},lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,NMSubs))),
+    NMZ =      
+        if (V == zero) and (MCount == 0) ->
+               [{never_non_matched,get_range(Exp),Exp,[]}];
+           (V /= zero) and (MCount > 0) ->
+                [{non_matched,get_range(Exp),Exp,[]}];
+           true ->
+	       []
+         end,
+    MZ ++ MZs ++ NMZ ++ NMZs;
+get_z_leaves(V, #bool_log{exp=Exp,tcount=TCount,fcount=FCount,fsubs=FSubs,tsubs=TSubs}) ->
+    TZs = z_context({true,Exp},lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,TSubs))),
+    TZ = if (V == zero) and (TCount == 0) ->
+               [{never_true,get_range(Exp),Exp,[]}];
+           (V /= zero) and (TCount > 0) ->
+               [{true,get_range(Exp),Exp,[]}];
+           true ->
+	       []
+         end,
+    FZs = z_context({false,Exp},lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,FSubs))),
+    FZ =      
+        if (V == zero) and (FCount == 0) ->
+               [{never_false,get_range(Exp),Exp,[]}];
+           (V /= zero) and (FCount > 0) ->
+               [{false,get_range(Exp),Exp,[]}];
+           true ->
+	       []
+         end,
+    TZ ++ TZs ++ FZ ++ FZs;
+get_z_leaves(V, {Extra,MCount,NMCount}) ->
+    MC = if (V == zero) and (MCount == 0) ->
+          [{never_used_extra,{{0,0},{0,0}},Extra,[]}];
+        (V /= zero) and (MCount > 0) ->
+          [{used_extra,{{0,0},{0,0}},Extra,[]}];
+      true ->
+          []
+    end,
+    NMC = if (V == zero) and (NMCount == 0) ->
+             [{never_unused_extra,{{0,0},{0,0}},Extra,[]}];
+           (V /= zero) and (NMCount > 0) ->
+             [{unused_extra,{{0,0},{0,0}},Extra,[]}];
+           true ->
+             []
+    end,
+    MC ++ NMC;
+get_z_leaves(V, C) ->
+    exit({unimplemented_get_leaves,C}). 
+
+z_context(Exp, Zs) ->
+    lists:map(fun({MNM,R,E,Ctx}) ->
+                  {MNM,R,E,[Exp | Ctx]}
+              end,
+              Zs).

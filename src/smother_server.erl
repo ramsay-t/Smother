@@ -5,7 +5,7 @@
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
 
--export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2,show_files/0]).
+-export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1]).
 -export([init/1,handle_call/2,handle_cast/2,terminate/2,handle_call/3,code_change/3,handle_info/2]).
 
 -export([build_pattern_record/1,build_bool_record/1,within_loc/2]).
@@ -54,14 +54,8 @@ handle_call({declare,File,Loc,Declaration},State) ->
 		ExpRecords = 
 		    lists:flatten(
 		    lists:map(fun(C) ->
-				      io:format("    Pattern with ~p components found~n", [length(C)]),
 				      R = lists:map(fun(Cc) -> 
-							    io:format("        Component with ~p clauses found~n", [length(Cc)]),
 							    Rr = lists:map(fun ?MODULE:build_bool_record/1, Cc),
-							    lists:map(fun(Rrr) -> 
-									      io:format("        ~p~n",[revert(Rrr#bool_log.exp)]) 
-								      end, 
-								      Rr),
 							    lists:flatten(Rr)
 						    end,
 						    C),
@@ -99,6 +93,7 @@ handle_call({declare,File,Loc,Declaration},State) ->
 			_ ->
 			    build_pattern_record(list_from_list(Args))
 		    end,
+                AR2 = ArgRecords#pat_log{extras=[]},
 		%%Find function declaration and add a pattern...
 		{OldLoc, {fun_expr,F,Arity,Patterns}} = 
 		    case lists:filter(fun({_Loc,Rec}) ->
@@ -115,7 +110,7 @@ handle_call({declare,File,Loc,Declaration},State) ->
 			[] ->
 			    {Loc,{fun_expr,F,Arity,[]}}
 		    end,
-		NewFRecord = {fun_expr,F,Arity,Patterns ++ [{Loc,ArgRecords}]},
+		NewFRecord = {fun_expr,F,Arity,Patterns ++ [{Loc,AR2}]},
 		%% This assumes declarations will arrive in order...
 		{Start,_End} = OldLoc,
 		{_NewStart,NewEnd} = Loc,
@@ -370,6 +365,8 @@ build_pattern_record([E]) ->
     Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs};
+build_pattern_record({wrapper,variable,_Attrs,_Image}=E) ->
+    #pat_log{exp=E,nmcount=-1,subs=[],extras=[],matchedsubs=[]};
 build_pattern_record(E) ->
     %%io:format("No guards...?~n"),
     %%io:format("Single HIT:~p~n",[E]),
@@ -386,11 +383,17 @@ add_match([S | Ss]) ->
 	matchedsubs=add_match(S#pat_log.matchedsubs)
        } | add_match(Ss)].
 
+unuse_extras([]) ->
+  [];
+unuse_extras([{E,M,NM} | Es]) ->
+  [{E,M,NM+1} | unuse_extras(Es)].
+
 apply_pattern_log(_EVal,[],_Bindings) ->
     [];
-apply_pattern_log(_EVal,[#pat_log{exp={wrapper,nil,_Attr,_Image}}=PatLog | Es],_Bindings) ->
+apply_pattern_log(_EVal,[#pat_log{exp={wrapper,nil,_Attr,_Image},extras=Extras}=PatLog | Es],_Bindings) ->
     [PatLog#pat_log{
-	   mcount=PatLog#pat_log.mcount+1
+	   mcount=PatLog#pat_log.mcount+1,
+           extras=unuse_extras(Extras)
 	  } | Es];
 apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | Es],Bindings) ->
     %%io:format("Reverting ~p~nAgainst: ~p~n~n",[EVal,PatLog]),
@@ -414,7 +417,8 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 	NewPat = PatLog#pat_log{
 		   mcount=PatLog#pat_log.mcount+1,
 		   matchedsubs=add_match(PatLog#pat_log.matchedsubs),
-		   guards=NewGuards
+		   guards=NewGuards,
+                   extras=unuse_extras(Extras)
 		  },
 
 	%%io:format("Pattern MATCH, Guards: ~p~n",[Result]),
@@ -434,14 +438,14 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 		    NewExtras = 
 			case Extra of
 			    no_extras ->
-				Extras;
+				unuse_extras(Extras);
 			    _ ->
 				case lists:keyfind(Extra,1,Extras) of
 				    {Extra,EMCount,ENMCount} ->
 					lists:keyreplace(Extra,1,Extras,{Extra,EMCount+1,ENMCount});
 				    _ ->
 					io:format("Unknown extra result: ~p~n",[Extra]),
-					Extras
+					unuse_extras(Extras)
 				end
 			end,
 		    [PatLog#pat_log{nmcount=PatLog#pat_log.nmcount+1,subs=NewSubs,extras=NewExtras}| apply_pattern_log(EVal,Es,Bindings)];
@@ -659,3 +663,17 @@ abstract_revert(EVal) ->
     end.
 
 	
+get_zeros(File) ->
+    case analyse(File) of
+    	 {error,Msg} ->
+  	     {error,Msg};
+	 {ok,Analysis} ->
+	     smother_analysis:get_zeros(Analysis)
+    end.
+get_nonzeros(File) ->
+    case analyse(File) of
+    	 {error,Msg} ->
+  	     {error,Msg};
+	 {ok,Analysis} ->
+	     smother_analysis:get_nonzeros(Analysis)
+    end.
