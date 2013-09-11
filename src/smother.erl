@@ -23,8 +23,8 @@ compile(Filename,Includes) ->
 
     %%{MFs,EFs,FTs} = smother_annotater:get_forms(TmpFile,Includes),
     %%case compile:forms([MFs,EFs,FTs],[debug_info]) of
-    %%case compile:file(TmpFile,[binary,debug_info]) of
-    case compile:forms(Forms,[binary,debug_info]) of
+    %%case compile:file(TmpFile,[binary,debug_info,]) of
+    case compile:forms(Forms,[binary,debug_info,verbose,report_errors,report_warnings]) of
 	{ok,Module,Binary} ->
 	    code:load_binary(Module,Filename,Binary);
 	Error ->
