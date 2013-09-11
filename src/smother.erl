@@ -28,7 +28,7 @@ compile(Filename,Includes) ->
 	{ok,Module,Binary} ->
 	    code:load_binary(Module,Filename,Binary);
 	Error ->
-	    exit({"Failed to compile the transformed module.",Error})
+	    Error
     end.
 
 show_files() ->
