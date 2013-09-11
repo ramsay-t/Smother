@@ -1,5 +1,5 @@
 -module(smother_analysis).
--export([make_html_analysis/3,get_range/1,get_zeros/1,get_nonzeros/1]).
+-export([make_html_analysis/3,get_range/1,get_zeros/1,get_nonzeros/1,get_percentage/1]).
 
 -include_lib("wrangler/include/wrangler.hrl").
 -include("include/eval_records.hrl").
@@ -573,3 +573,12 @@ z_context(Exp, Zs) ->
                   {MNM,R,E,[Exp | Ctx]}
               end,
               Zs).
+
+get_percentage(Analysis) ->
+  Zeros = length(get_zeros(Analysis)),
+  NonZeros = length(get_nonzeros(Analysis)),
+  Total = Zeros + NonZeros,
+  if Total == 0 -> 100;
+     true ->
+       (NonZeros / Total) * 100
+  end.

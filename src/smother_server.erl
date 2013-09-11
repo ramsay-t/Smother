@@ -680,10 +680,9 @@ get_split(File) ->
   {length(get_zeros(File)),length(get_nonzeros(File))}.
 
 get_percentage(File) ->
-  Zeros = get_zeros(File),
-  NonZeros = get_nonzeros(File),
-  Total = length(Zeros) + length(NonZeros),
-  if Total == 0 -> 100;
-     true ->
-       (length(NonZeros) / Total) * 100
-  end.
+    case analyse(File) of
+    	 {error,Msg} ->
+  	     {error,Msg};
+	 {ok,Analysis} ->
+	     smother_analysis:get_percentage(Analysis)
+    end.
