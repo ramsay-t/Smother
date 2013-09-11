@@ -99,7 +99,7 @@ analyse_to_html(IF,OF,FDict,{FLocLine,FLocChar} = FLoc) ->
 	end.
 
 make_report(Coverage=#analysis_report{type=bool}) ->
-    io:format("Making messages for ~s (~p,~p)~n",[Coverage#analysis_report.exp,length(Coverage#analysis_report.matchedsubs),length(Coverage#analysis_report.nonmatchedsubs)]),
+    %% io:format("Making messages for ~s (~p,~p)~n",[Coverage#analysis_report.exp,length(Coverage#analysis_report.matchedsubs),length(Coverage#analysis_report.nonmatchedsubs)]),
     Class = determine_class(Coverage),
 
     MatchMsg = make_msg(
@@ -133,7 +133,7 @@ make_report(Coverage=#analysis_report{type=bool}) ->
     DeQMsg = re:replace(Msg,"\"","\\&quot;",[{return,list},global]),
     lists:flatten(io_lib:format("<span class=\"condition ~p\" title=\"~s\">",[Class,DeQMsg]));
 make_report(Coverage=#analysis_report{type=pat}) ->
-    io:format("Making messages for ~s~n",[Coverage#analysis_report.exp]),
+    %%io:format("Making messages for ~s~n",[Coverage#analysis_report.exp]),
 
     Class = determine_class(Coverage),
 
@@ -512,55 +512,55 @@ get_zs(V,C) ->
  
 
 get_z_leaves(V, #pat_log{exp=Exp,mcount=MCount,nmcount=NMCount,subs=NMSubs,extras=Extras}) ->
-    MZs = z_context({matched,Exp},lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,Extras))),
+    MZs = z_context(matched,Exp,lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,Extras))),
     MZ = if (V == zero) and (MCount == 0) ->
-               [{never_matched,get_range(Exp),Exp,[]}];
+               [{never_matched,get_range(Exp),[]}];
             (V /= zero) and (MCount > 0) ->
-               [{matched,get_range(Exp),Exp,[]}];
+               [{matched,get_range(Exp),[]}];
            true ->
 	       []
          end,
-    NMZs = z_context({non_matched,Exp},lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,NMSubs))),
+    NMZs = z_context(non_matched,Exp,lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,NMSubs))),
     NMZ =      
         if (V == zero) and (MCount == 0) ->
-               [{never_non_matched,get_range(Exp),Exp,[]}];
+               [{never_non_matched,get_range(Exp),[]}];
            (V /= zero) and (MCount > 0) ->
-                [{non_matched,get_range(Exp),Exp,[]}];
+                [{non_matched,get_range(Exp),[]}];
            true ->
 	       []
          end,
     MZ ++ MZs ++ NMZ ++ NMZs;
 get_z_leaves(V, #bool_log{exp=Exp,tcount=TCount,fcount=FCount,fsubs=FSubs,tsubs=TSubs}) ->
-    TZs = z_context({true,Exp},lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,TSubs))),
+    TZs = z_context(true,Exp,lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,TSubs))),
     TZ = if (V == zero) and (TCount == 0) ->
-               [{never_true,get_range(Exp),Exp,[]}];
+               [{never_true,get_range(Exp),[]}];
            (V /= zero) and (TCount > 0) ->
-               [{true,get_range(Exp),Exp,[]}];
+               [{true,get_range(Exp),[]}];
            true ->
 	       []
          end,
-    FZs = z_context({false,Exp},lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,FSubs))),
+    FZs = z_context(false,Exp,lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,FSubs))),
     FZ =      
         if (V == zero) and (FCount == 0) ->
-               [{never_false,get_range(Exp),Exp,[]}];
+               [{never_false,get_range(Exp),[]}];
            (V /= zero) and (FCount > 0) ->
-               [{false,get_range(Exp),Exp,[]}];
+               [{false,get_range(Exp),[]}];
            true ->
 	       []
          end,
     TZ ++ TZs ++ FZ ++ FZs;
 get_z_leaves(V, {Extra,MCount,NMCount}) ->
     MC = if (V == zero) and (MCount == 0) ->
-          [{never_used_extra,{{0,0},{0,0}},Extra,[]}];
+          [{never_used_extra,Extra,[]}];
         (V /= zero) and (MCount > 0) ->
-          [{used_extra,{{0,0},{0,0}},Extra,[]}];
+          [{used_extra,Extra,[]}];
       true ->
           []
     end,
     NMC = if (V == zero) and (NMCount == 0) ->
-             [{never_unused_extra,{{0,0},{0,0}},Extra,[]}];
+             [{never_unused_extra,Extra,[]}];
            (V /= zero) and (NMCount > 0) ->
-             [{unused_extra,{{0,0},{0,0}},Extra,[]}];
+             [{unused_extra,Extra,[]}];
            true ->
              []
     end,
@@ -568,11 +568,9 @@ get_z_leaves(V, {Extra,MCount,NMCount}) ->
 get_z_leaves(V, C) ->
     exit({unimplemented_get_leaves,C}). 
 
-z_context(Exp, Zs) ->
-    lists:map(fun({MNM,R,E,Ctx}) ->
-                  {MNM,R,E,[Exp | Ctx]}
-              end,
-              Zs).
+z_context(Status, Exp, Zs) ->
+	       E = get_range(Exp),
+	       [{MNM,R,[{Status, E} | Ctx]} || {MNM,R,Ctx} <- Zs].
 
 get_percentage(Analysis) ->
   Zeros = length(get_zeros(Analysis)),
