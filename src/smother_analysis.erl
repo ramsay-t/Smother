@@ -99,16 +99,17 @@ analyse_to_html(IF,OF,FDict,{FLocLine,FLocChar} = FLoc) ->
 	end.
 
 make_report(Coverage=#analysis_report{type=bool}) ->
+    io:format("Making messages for ~s (~p,~p)~n",[Coverage#analysis_report.exp,length(Coverage#analysis_report.matchedsubs),length(Coverage#analysis_report.nonmatchedsubs)]),
     Class = determine_class(Coverage),
 
     MatchMsg = make_msg(
-		 "When matched",
+		 "When true",
 		 Coverage#analysis_report.matched,
 		 Coverage#analysis_report.msubsproportion,
 		 Coverage#analysis_report.matchedsubs
 		),
     NonMatchMsg = make_msg(
-		    "When non-matched",
+		    "When false",
 		    Coverage#analysis_report.nonmatched,
 		    Coverage#analysis_report.nmsubsproportion,
 		    Coverage#analysis_report.nonmatchedsubs
@@ -132,6 +133,8 @@ make_report(Coverage=#analysis_report{type=bool}) ->
     DeQMsg = re:replace(Msg,"\"","\\&quot;",[{return,list},global]),
     lists:flatten(io_lib:format("<span class=\"condition ~p\" title=\"~s\">",[Class,DeQMsg]));
 make_report(Coverage=#analysis_report{type=pat}) ->
+    io:format("Making messages for ~s~n",[Coverage#analysis_report.exp]),
+
     Class = determine_class(Coverage),
 
     ExtraMsg = make_msg(
@@ -196,6 +199,7 @@ determine_class(Coverage) ->
     end.
 
 make_msg(Status,Proportion,SubProportion,Reports) ->
+io:format("      Message for \"~s\": ~p ~p ~p ~n",[Status,Proportion,SubProportion,length(Reports)]),
     Percentage = if Proportion == 0 -> 
 		 colourise(0); 
 	    Proportion < 0 -> 
@@ -218,20 +222,6 @@ make_msg(Status,Proportion,SubProportion,Reports) ->
        true ->
 	    ""
     end.
-
-%%get_match_counts(Cond) ->
-%%    case Cond of
-%%	#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}},tcount=TCount} ->
-%%	    {TCount,-1};
-%%	#bool_log{} ->
-%%	    {Cond#bool_log.tcount,Cond#bool_log.fcount};
-%%	#pat_log{} ->
-%%	    {Cond#pat_log.mcount,Cond#pat_log.nmcount};
-%%	{merged,MC,NMC} ->
-%%	    {MC,NMC};
-%%	_ ->
-%%	    exit({"Unhandled record type", Cond})
-%%    end.
 
 colourise(N) ->
     colourise(N,1).
@@ -291,6 +281,7 @@ get_analysis_from_subs(Cond = #bool_log{},FLoc) ->
 	end,
     R2 =
 	if FLoc == Start ->
+                io:format("==> ~p~n",[measure_coverage(Cond)]),
 		[{condition_start,measure_coverage(Cond)} | SubConds];
 	   true ->
 		SubConds
@@ -338,15 +329,16 @@ analyse_both_branches(MBranch, NMBranch) ->
     Pairs = lists:zip(MBranch,NMBranch),
     lists:map(fun({M,NM}) -> merge_branches(M,NM) end, Pairs).
 
-merge_branches({condition_start,#analysis_report{exp=LExp,matched=LM,nonmatched=LNM}},{condition_start,#analysis_report{exp=RExp,matched=RM,nonmatched=RNM}}) ->
+merge_branches({condition_start,#analysis_report{exp=LExp,matched=LM,nonmatched=LNM,matchedsubs=LMS,nonmatchedsubs=LNMS}},{condition_start,#analysis_report{exp=RExp,matched=RM,nonmatched=RNM,matchedsubs=RMS,nonmatchedsubs=RNMS}}) ->
     if not (LExp==RExp) ->
 	    exit({"merging different expressions",LExp,RExp});
        true ->
 	    MRep = #analysis_report{
 		      exp=LExp,
 		      matched=LM+RM,
-		      nonmatched=LNM+RNM
-		      %% Subs. etc are blanked in merging, only top level info available...
+		      nonmatched=LNM+RNM,
+                      matchedsubs=merge_coverage(LMS,RMS),
+                      nonmatchedsubs=merge_coverage(LNMS,RNMS)		      
 		     },
 	    {condition_start,MRep}
     end;
@@ -355,6 +347,20 @@ merge_branches({condition_end},{condition_end}) ->
 merge_branches(M,NM) ->
     io:format("Don't know how to merge ~p and ~p~n",[M,NM]),
     [].
+
+merge_coverage([],[]) ->
+  [];
+merge_coverage([#analysis_report{exp=Exp,matched=LM,nonmatched=LNM,matchedsubs=LMS,nonmatchedsubs=LNMS}| LMore],[#analysis_report{exp=RExp,matched=RM,nonmatched=RNM,matchedsubs=RMS,nonmatchedsubs=RNMS} | RMore]) ->
+  [#analysis_report{
+		      exp=Exp,
+		      matched=LM+RM,
+		      nonmatched=LNM+RNM,
+                      matchedsubs=merge_coverage(LMS,RMS),
+                      nonmatchedsubs=merge_coverage(LNMS,RNMS)		      
+		     } 
+   | merge_coverage(LMore, RMore)];
+merge_coverage(L,R) ->
+  exit({"Merging different coverage.",{L,R}}).
 
 %% Measures coverage and returns a quad: {Match count, NonMatch count, Subs average matched, Subs average unmatched}
 measure_coverage(#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}}=Exp,tcount=TCount}) ->
@@ -374,15 +380,7 @@ measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,e
 		nonmatchedsubs=NMSubs,
 		msubsproportion=coverage_average(MSubs),
 		nmsubsproportion=coverage_average(NMSubs)
-	       },
-    case Image of
-	'and' ->
-	    Report#analysis_report{matchedsubs=[],msubsproportion=1};
-	'or' ->
-	    Report#analysis_report{nonmatchedsubs=[],nmsubsproportion=1};
-	_ ->
-	    Report
-	end;
+	       };
 measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,exp=Exp}) ->
     MSubs = lists:map(fun measure_coverage/1, TSubs),
     NMSubs = lists:map(fun measure_coverage/1, FSubs),

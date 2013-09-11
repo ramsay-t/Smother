@@ -5,7 +5,7 @@
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
 
--export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1]).
+-export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1]).
 -export([init/1,handle_call/2,handle_cast/2,terminate/2,handle_call/3,code_change/3,handle_info/2]).
 
 -export([build_pattern_record/1,build_bool_record/1,within_loc/2]).
@@ -187,8 +187,7 @@ handle_cast({log,File,Loc,LogData},State) ->
 		    %%io:format("Rec with value: ~p~n", [LogData]),
 		    %%NewPatterns = Patterns,
 		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{receive_expr,NewPatterns}}),
-		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
-			
+		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};	
 		[{Loc,{if_expr,VarNames,ExRecords}}] ->
 		    %io:format("Logging instance for ~p at ~p: ~p~n",[File,Loc,LogData]),
 		    Bindings = lists:zip(VarNames,LogData),
@@ -282,7 +281,6 @@ within_loc({{Sl,Sp},{El,Ep}} = _Loc, {{SSl,SSp},{SEl,SEp}} = _SubLoc) ->
 
 apply_bool_log(_Bindings,[],_All) ->
     [];
-%%apply_bool_log(Bindings,[{E,TCount,FCount,TSubs,FSubs} | Es]) ->
 apply_bool_log(Bindings,[#bool_log{}=Log | Es],All) ->   
     E = revert(Log#bool_log.exp),
     %%io:format("Evaluating:~n~p~nUnder: ~p~n",[E,Bindings]),
@@ -640,7 +638,7 @@ apply_fun_log(Loc,LogData,[{PreLoc,Rec} | Ps]) ->
 
 
 de_pid(EVal) ->
-    if is_pid(EVal) ->
+    if is_pid(EVal) or is_port(EVal) ->
 	    lists:flatten(io_lib:format("~p",[EVal]));
        is_list(EVal) ->
 	    [de_pid(EV) || EV <- EVal];
@@ -677,3 +675,15 @@ get_nonzeros(File) ->
 	 {ok,Analysis} ->
 	     smother_analysis:get_nonzeros(Analysis)
     end.
+
+get_split(File) ->
+  {length(get_zeros(File)),length(get_nonzeros(File))}.
+
+get_percentage(File) ->
+  Zeros = get_zeros(File),
+  NonZeros = get_nonzeros(File),
+  Total = length(Zeros) + length(NonZeros),
+  if Total == 0 -> 100;
+     true ->
+       (length(NonZeros) / Total) * 100
+  end.
