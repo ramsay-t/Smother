@@ -199,7 +199,7 @@ determine_class(Coverage) ->
     end.
 
 make_msg(Status,Proportion,SubProportion,Reports) ->
-io:format("      Message for \"~s\": ~p ~p ~p ~n",[Status,Proportion,SubProportion,length(Reports)]),
+%%io:format("      Message for \"~s\": ~p ~p ~p ~n",[Status,Proportion,SubProportion,length(Reports)]),
     Percentage = if Proportion == 0 -> 
 		 colourise(0); 
 	    Proportion < 0 -> 
@@ -456,20 +456,6 @@ coverage_average(List) ->
 			      List),
 	    Res / LL
     end.
-
-%%html_encode(P) ->
-%%    html_encode_string(lists:flatten(io_lib:format("~p", [P]))).
-
-%%html_encode_string([]) ->
-%%    [];
-%%html_encode_string([34 | More]) ->
-%%    "&quot;" ++ html_encode_string(More);
-%%html_encode_string([60 | More]) ->
-%%    "&lt;" ++ html_encode_string(More);
-%%html_encode_string([62 | More]) ->
-%%    "&gt;" ++ html_encode_string(More);
-%%html_encode_string([C | More]) ->
-%%    [C | html_encode_string(More)].
 
 get_range({attr,_ALoc,Attrs,_}) ->
    case lists:keyfind(range,1,Attrs) of
