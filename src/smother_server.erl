@@ -5,7 +5,7 @@
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
 
--export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1]).
+-export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1]).
 -export([init/1,handle_call/2,handle_cast/2,terminate/2,handle_call/3,code_change/3,handle_info/2]).
 
 -export([build_pattern_record/1,build_bool_record/1,within_loc/2]).
@@ -21,6 +21,13 @@ handle_call(show_files,State) ->
     {reply,Files,State};
 handle_call({clear,File},State) ->
     {reply,ok,lists:keystore(File,1,State,{File,[]})};
+handle_call({reset,File},State) ->
+    FDict = case lists:keyfind(File,1,State) of
+		false -> [];
+		{File, FD} -> FD
+	    end,
+    NewFDict = reset_entries(FDict),
+    {reply,ok,lists:keystore(File,1,State,{File,NewFDict})};
 handle_call({declare,File,Loc,Declaration},State) ->
     %%io:format("Declaration in ~p~n",[File]),
     FDict = case lists:keyfind(File,1,State) of
@@ -243,7 +250,9 @@ analyse_to_file(File) ->
     Outfile = lists:flatten(io_lib:format("~s-SMOTHER.html",[File])),
     gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}).
     
-    
+reset(File) ->    
+   gen_server:call({global,smother_server},{reset,File}).
+
 declare(File,Loc,Declaration) ->
     start_if_needed(),
     gen_server:call({global,smother_server},{declare,File,Loc,Declaration}).
@@ -695,3 +704,32 @@ get_percentage(File) ->
 	 {ok,Analysis} ->
 	     smother_analysis:get_percentage(Analysis)
     end.
+
+reset_entries([]) ->
+		  [];
+reset_entries([{Loc,Dec} | More]) ->
+    NewDec = 	case Dec of
+    	   	 {fun_expr,Name,Arity,Patterns} ->
+								V = 	  {fun_expr,Name,Arity,
+									  lists:map(fun({Loc,Content}) ->
+						  				 {Loc,hd(reset_entries([Content]))} 
+									  end, Patterns)
+									  };
+							    _ ->
+								L = tuple_to_list(Dec),
+								Content = lists:nth(length(L),L),
+								NewContent = reset_entries(Content),
+								{NHead,_} = lists:split(length(L)-1,L),
+								list_to_tuple(NHead ++ [NewContent])
+							end,
+    [{Loc,NewDec} | reset_entries(More)];
+reset_entries([#bool_log{}=P | More]) ->
+			    
+			    [P#bool_log{tcount=0,fcount=0,tsubs=reset_entries(P#bool_log.tsubs),fsubs=reset_entries(P#bool_log.fsubs)} | reset_entries(More)];
+reset_entries([#pat_log{}=P | More]) ->
+			    [P#pat_log{mcount=0,nmcount=0,subs=reset_entries(P#pat_log.subs),extras=reset_entries(P#pat_log.extras),matchedsubs=reset_entries(P#pat_log.matchedsubs)} | reset_entries(More)];
+reset_entries([{Extra,_M,_NM} | More]) ->
+    [{Extra,0,0} | reset_entries(More)];
+reset_entries([E | More]) ->
+    io:format("Cannot reset ~p~n",[E]),
+    [E | reset_entries(More)].

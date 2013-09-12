@@ -1,5 +1,5 @@
 -module(smother).
--export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1]).
+-export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1]).
 
 -export([var_server/1]).
 
@@ -229,3 +229,5 @@ get_split(File) ->
     smother_server:get_split(File).
 get_percentage(File) ->
     smother_server:get_percentage(File).
+reset(File) ->
+    smother_server:reset(File).
