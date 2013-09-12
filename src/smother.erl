@@ -12,7 +12,6 @@ compile(Filename,Includes) ->
     wrangler_ast_server:start_ast_server(),
     smother_server:clear(Filename),
     AST2 = instrument(Filename),
-%%    Code = ?PP(AST2),
     Code = wrangler_prettypr:print_ast('unix',AST2),
 
     {ok, ModInfo} = api_refac:get_module_info(Filename),
@@ -21,9 +20,6 @@ compile(Filename,Includes) ->
     TmpFile = smother_annotater:make_tmp_file(ModName,Code),
     {ok,Forms} = epp:parse_file(TmpFile,Includes,[]),
 
-    %%{MFs,EFs,FTs} = smother_annotater:get_forms(TmpFile,Includes),
-    %%case compile:forms([MFs,EFs,FTs],[debug_info]) of
-    %%case compile:file(TmpFile,[binary,debug_info,]) of
     case compile:forms(Forms,[binary,debug_info,verbose,report_errors,report_warnings]) of
 	{ok,Module,Binary} ->
 	    code:load_binary(Module,Filename,Binary);
@@ -126,6 +122,9 @@ rules(File) ->
 	       Declare = {if_expr,VarList,Guards@@@},
 	       smother_server:declare(File,Loc,Declare),
 	       ?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
+
+
+
 	   end
 	   ,api_refac:type(_This@)/=attribute),
      ?RULE(?T("case Expr@@ of Pats@@@ when Guards@@@ -> Body@@@ end"),
@@ -135,13 +134,38 @@ rules(File) ->
 	       LocString = get_loc_string(_This@),
 	       ExprStx = hd(lists:flatten(wrangler_syntax:revert_forms(Expr@@))),
 	       
-	       VarList = lists:flatten(lists:map(fun(G) -> api_refac:free_var_names(G) end, Guards@@@)),
-	       VarListString = re:replace(lists:flatten(io_lib:format("~p", [VarList])),"'","",[{return,list},global]),
+	      %% VarList = lists:flatten(lists:map(fun(G) -> api_refac:free_var_names(G) end, Guards@@@)),
+	      %% VarListString = re:replace(lists:flatten(io_lib:format("~p", [VarList])),"'","",[{return,list},global]),
 	       
-	       Declare = {case_expr,ExprStx,VarList,lists:zip(Pats@@@,Guards@@@)},
+	      %% Declare = {case_expr,ExprStx,VarList,lists:zip(Pats@@@,Guards@@@)},
+	      %% smother_server:declare(File,Loc,Declare),
+
+	      %% ?TO_AST("begin EVal = Expr@@, VarList = [EVal | " ++ VarListString ++ "], smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",VarList), case EVal of Pats@@@ when Guards@@@ -> Body@@@ end end")
+
+	       {NewPats@@@,NewBody@@@} =lists:unzip( lists:map(
+			    fun({{P@@,G@@},B@@}) ->
+				    NewP@@ = [?TO_AST("P@@ = SMOTHER_CASE_PATTERN")],
+				    VarList = api_refac:free_var_names(G@@),
+
+				    VarPairStringList = lists:map(fun(V) ->
+									  {atom_to_list(V),V}
+							    end,
+							    VarList),
+
+				    VarListString = re:replace(
+						      re:replace(
+							lists:flatten(io_lib:format("~p", [VarPairStringList]))
+							,"'","",[{return,list},global]
+						       ),"\"","'",[{return,list},global]),
+				    {NewP@@,[?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[SMOTHER_CASE_PATTERN | " ++ VarListString ++ "]), B@@ end")]}
+			    end,
+			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
+			   )),
+
+	       Declare = {case_expr,ExprStx,lists:zip(Pats@@@,Guards@@@)},
 	       smother_server:declare(File,Loc,Declare),
 
-	       ?TO_AST("begin EVal = Expr@@, VarList = [EVal | " ++ VarListString ++ "], smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",VarList), case EVal of Pats@@@ when Guards@@@ -> Body@@@ end end")
+	       ?TO_AST("case Expr@@ of NewPats@@@ when Guards@@@ -> NewBody@@@ end")
 	   end
 	   ,api_refac:type(_This@)/=attribute),
      ?RULE(?T("receive Pats@@@ when Guards@@@ -> Body@@@ end"),

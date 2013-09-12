@@ -65,15 +65,16 @@ handle_call({declare,File,Loc,Declaration},State) ->
 			      Content)
 		     ),
 		lists:keystore(Loc,1,FDict,{Loc,{if_expr,VarNames,ExpRecords}});
-	    {case_expr,Expr,VarNames,Content} ->
-		%%io:format("Case Declaration ~p~n",[Loc]),
-		ExpRecords = lists:map(fun ?MODULE:build_pattern_record/1,Content),
-		lists:keystore(Loc,1,FDict,{Loc,{case_expr,Expr,VarNames,ExpRecords}});
+	    {case_expr,Expr,Content} ->
+		%%ExpRecords = lists:map(fun ?MODULE:build_pattern_record/1,Content),
+		ExpRecords = lists:map(fun({P,G}=C) ->
+					     build_pattern_record(C)
+				     end,
+				     Content),
+
+		lists:keystore(Loc,1,FDict,{Loc,{case_expr,Expr,ExpRecords}});
 	    {receive_expr,Content} ->
-		%%io:format("Recieve Declaration ~p~n~p~n",[Loc,Content]),
-		%%Patterns = lists:map(fun ?MODULE:build_pattern_record/1,Content),
 		Patterns = lists:map(fun({P,G}=C) ->
-					     %%io:format("Making record from ~p~n",[revert(hd(P))]),
 					     build_pattern_record(C)
 				     end,
 				     Content),
@@ -182,24 +183,18 @@ handle_cast({log,File,Loc,LogData},State) ->
 		    end;
 		[{Loc, {receive_expr,Patterns}}] ->
 		    [EVal | Bindings] = LogData,
-		    %%io:format("~nGot a recieve with EVal ~p and Bindings ~p~n",[EVal, Bindings]),
 		    NewPatterns = apply_pattern_log(EVal,Patterns,Bindings),
-		    %%io:format("Rec with value: ~p~n", [LogData]),
-		    %%NewPatterns = Patterns,
 		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{receive_expr,NewPatterns}}),
 		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};	
 		[{Loc,{if_expr,VarNames,ExRecords}}] ->
-		    %io:format("Logging instance for ~p at ~p: ~p~n",[File,Loc,LogData]),
 		    Bindings = lists:zip(VarNames,LogData),
 		    ExRecords2 = apply_bool_log(Bindings,ExRecords,false),
 		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{if_expr,VarNames,ExRecords2}}),
 		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
-		[{Loc,{case_expr,Expr,VarNames,ExRecords}}]  ->
-		    [EVal | TrueLogData] = LogData,
-		    %io:format("Logging case expr~nExp: ~p~nExp Val: ~p~nVarNames: ~p~nLogData: ~p~n", [Expr,EVal,VarNames,TrueLogData]),
-		    Bindings = lists:zip(VarNames,TrueLogData),
+		[{Loc,{case_expr,Expr,ExRecords}}]  ->
+		    [EVal | Bindings] = LogData,
 		    ExRecords2 = apply_pattern_log(EVal,ExRecords,Bindings),
-		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{case_expr,Expr,VarNames,ExRecords2}}),
+		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{case_expr,Expr,ExRecords2}}),
 		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
 		[{ParentLoc, {fun_expr,F,Arity,Patterns}}] ->
 		    NewPatterns = apply_fun_log(Loc,LogData,Patterns),
@@ -394,12 +389,11 @@ apply_pattern_log(_EVal,[#pat_log{exp={wrapper,nil,_Attr,_Image},extras=Extras}=
            extras=unuse_extras(Extras)
 	  } | Es];
 apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | Es],Bindings) ->
-    %%io:format("Reverting ~p~nAgainst: ~p~n~n",[EVal,PatLog]),
     ValStx = abstract_revert(EVal),
     try
-	%%io:format("Reverting ~p~n~n",[PatLog#pat_log.exp]),
+	%% io:format("Reverting ~p~n~n",[PatLog#pat_log.exp]),
 	TrueExp = revert(Exp),
-	%%io:format("Comparing ~p to pattern ~p~n", [EVal,TrueExp]),
+	%%io:format("Comparing ~p to pattern ~p~n", [TrueExp,ValStx]),
 	
 	_Comps = erl_eval:expr(erl_syntax:revert(erl_syntax:match_expr(TrueExp,ValStx)),Bindings),
 
@@ -457,6 +451,7 @@ match_guards([],_Bindings) ->
 match_guards([#bool_log{}=G | Gs], Bindings) ->
     {SubRes, NewGs} = match_guards(Gs,Bindings),
     NewLog = hd(apply_bool_log(Bindings,[G],true)),
+    %% io:format("Tested ~p : ~p vs ~p~n",[?PP(NewLog#bool_log.exp),NewLog#bool_log.tcount,G#bool_log.tcount]),
     if NewLog#bool_log.tcount > G#bool_log.tcount ->
 	    %% Matched...
 	    {SubRes, [NewLog | NewGs]};
@@ -609,8 +604,20 @@ fix_ints(E) ->
     %%io:format("Can't fix ints in ~p~n",[E]),
     E.
 
+fix_lines({Type,_Line,Image}) ->
+  {Type,0,Image};
+fix_lines({X,_Line,Image,Left,Right}) ->
+  {X,0,Image,fix_lines(Left),fix_lines(Right)};
+fix_lines({Y,_Line,Head,Tail}) ->
+  {Y,0,fix_lines(Head),fix_lines(Tail)};
+fix_lines({Z,_Line}) ->
+  {Z,0};
+fix_lines(E) ->
+  io:format("Can't fix lines in ~p~n",[E]),
+  E.
+
 revert(Exp) ->
-    fix_ints(wrangler_syntax:revert(Exp)).
+    fix_lines(fix_ints(wrangler_syntax:revert(Exp))).
 
 
 apply_fun_log(_Loc,_LogData,[]) ->
