@@ -183,6 +183,7 @@ handle_cast({log,File,Loc,LogData},State) ->
 		    end;
 		[{Loc, {receive_expr,Patterns}}] ->
 		    [EVal | Bindings] = LogData,
+		    io:format("RECEIVED: ~p~n",[EVal]),
 		    NewPatterns = apply_pattern_log(EVal,Patterns,Bindings),
 		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{receive_expr,NewPatterns}}),
 		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};	
@@ -645,8 +646,9 @@ apply_fun_log(Loc,LogData,[{PreLoc,Rec} | Ps]) ->
 
 
 de_pid(EVal) ->
-    if is_pid(EVal) or is_port(EVal) ->
-	    lists:flatten(io_lib:format("~p",[EVal]));
+    %% PIDs, Ports, and Functions are all non-decmposible so they will just be bound to variables...
+    if is_pid(EVal) or is_port(EVal) or is_function(EVal) or is_reference(EVal) ->
+	    list_to_atom(lists:flatten(io_lib:format("~p",[EVal])));
        is_list(EVal) ->
 	    [de_pid(EV) || EV <- EVal];
        is_tuple(EVal) ->
