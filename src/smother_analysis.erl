@@ -484,7 +484,7 @@ get_nonzeros(A) ->
 
 get_zs(_V,[]) ->
     [];
-get_zs(V,[{Loc,{case_expr,_Expr,Content}} | More]) ->
+get_zs(V,[{Loc,{case_expr,Content}} | More]) ->
     lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, Content)) ++ get_zs(V,More);
 get_zs(V,[{Loc,{if_expr,_VarNames,Content}} | More]) ->
     lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, Content)) ++ get_zs(V,More);

@@ -72,14 +72,12 @@ handle_call({declare,File,Loc,Declaration},State) ->
 			      Content)
 		     ),
 		lists:keystore(Loc,1,FDict,{Loc,{if_expr,VarNames,ExpRecords}});
-	    {case_expr,Expr,Content} ->
-		%%ExpRecords = lists:map(fun ?MODULE:build_pattern_record/1,Content),
+	    {case_expr,Content} ->
 		ExpRecords = lists:map(fun({P,G}=C) ->
 					     build_pattern_record(C)
 				     end,
 				     Content),
-
-		lists:keystore(Loc,1,FDict,{Loc,{case_expr,Expr,ExpRecords}});
+		lists:keystore(Loc,1,FDict,{Loc,{case_expr,ExpRecords}});
 	    {receive_expr,Content} ->
 		Patterns = lists:map(fun({P,G}=C) ->
 					     build_pattern_record(C)
@@ -87,10 +85,6 @@ handle_call({declare,File,Loc,Declaration},State) ->
 				     Content),
 		lists:keystore(Loc,1,FDict,{Loc,{receive_expr,Patterns}});
 	    {fun_case,F,Arity,Args,Guard} ->
-		%%io:format("Fun declaration ~p/~p ~p~n",[F,Arity,Loc]),
-		%%io:format("<~p, ~p> Function ~p/~p: ~p G:~p~n",[File,Loc,F,Arity,Args,Guard]),
-		%% ArgRecords = lists:map(fun ?MODULE:build_pattern_record/1,Args),
-		%%ArgRecords = build_pattern_record({fun_declaration,Loc,Args}),
 		ArgRecords = 
 		    case Args of 
 			[] ->
@@ -190,7 +184,7 @@ handle_cast({log,File,Loc,LogData},State) ->
 		    end;
 		[{Loc, {receive_expr,Patterns}}] ->
 		    [EVal | Bindings] = LogData,
-		    io:format("RECEIVED: ~p~n",[EVal]),
+		    %%io:format("RECEIVED: ~p~n",[EVal]),
 		    NewPatterns = apply_pattern_log(EVal,Patterns,Bindings),
 		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{receive_expr,NewPatterns}}),
 		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};	
@@ -199,10 +193,10 @@ handle_cast({log,File,Loc,LogData},State) ->
 		    ExRecords2 = apply_bool_log(Bindings,ExRecords,false),
 		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{if_expr,VarNames,ExRecords2}}),
 		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
-		[{Loc,{case_expr,Expr,ExRecords}}]  ->
+		[{Loc,{case_expr,ExRecords}}]  ->
 		    [EVal | Bindings] = LogData,
 		    ExRecords2 = apply_pattern_log(EVal,ExRecords,Bindings),
-		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{case_expr,Expr,ExRecords2}}),
+		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{case_expr,ExRecords2}}),
 		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
 		[{ParentLoc, {fun_expr,F,Arity,Patterns}}] ->
 		    NewPatterns = apply_fun_log(Loc,LogData,Patterns),
@@ -393,11 +387,6 @@ unuse_extras([{E,M,NM} | Es]) ->
 
 apply_pattern_log(_EVal,[],_Bindings) ->
     [];
-apply_pattern_log(_EVal,[#pat_log{exp={wrapper,nil,_Attr,_Image},extras=Extras}=PatLog | Es],_Bindings) ->
-    [PatLog#pat_log{
-	   mcount=PatLog#pat_log.mcount+1,
-           extras=unuse_extras(Extras)
-	  } | Es];
 apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | Es],Bindings) ->
     ValStx = abstract_revert(EVal),
     try
@@ -728,7 +717,7 @@ reset_entries([#bool_log{}=P | More]) ->
 			    
 			    [P#bool_log{tcount=0,fcount=0,tsubs=reset_entries(P#bool_log.tsubs),fsubs=reset_entries(P#bool_log.fsubs)} | reset_entries(More)];
 reset_entries([#pat_log{}=P | More]) ->
-			    [P#pat_log{mcount=0,nmcount=0,subs=reset_entries(P#pat_log.subs),extras=reset_entries(P#pat_log.extras),matchedsubs=reset_entries(P#pat_log.matchedsubs)} | reset_entries(More)];
+			    [P#pat_log{mcount=0,nmcount=0,subs=reset_entries(P#pat_log.subs),guards=reset_entries(P#pat_log.guards),extras=reset_entries(P#pat_log.extras),matchedsubs=reset_entries(P#pat_log.matchedsubs)} | reset_entries(More)];
 reset_entries([{Extra,_M,_NM} | More]) ->
     [{Extra,0,0} | reset_entries(More)];
 reset_entries([E | More]) ->
