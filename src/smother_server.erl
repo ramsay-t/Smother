@@ -405,13 +405,14 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 	TrueExp = revert(Exp),
 	%%io:format("Comparing ~p to pattern ~p~n", [TrueExp,ValStx]),
 	
-	_Comps = erl_eval:expr(erl_syntax:revert(erl_syntax:match_expr(TrueExp,ValStx)),Bindings),
+	{value,_V,NewBindings} = erl_eval:expr(erl_syntax:revert(erl_syntax:match_expr(TrueExp,ValStx)),Bindings),
+	%%io:format("Got back: ~p~n",[NewBindings]),
 
 	%% Now check for guard matches...
-	%%io:format("Pattern match, now need to match ~p guards under ~p...~n",[length(PatLog#pat_log.guards), Bindings]),
+	%%io:format("Pattern match, now need to match ~p guards under ~p...~n",[length(PatLog#pat_log.guards), NewBindings]),
 	{Result,NewGuards} = 
 	    try 
-		match_guards(Guards,Bindings)
+		match_guards(Guards,Bindings++NewBindings)
 	    catch error:{unbound_var,_} ->
 		    {fail,Guards}
 	    end,
