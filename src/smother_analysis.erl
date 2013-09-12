@@ -281,7 +281,7 @@ get_analysis_from_subs(Cond = #bool_log{},FLoc) ->
 	end,
     R2 =
 	if FLoc == Start ->
-                io:format("==> ~p~n",[measure_coverage(Cond)]),
+                %%io:format("==> ~p~n",[measure_coverage(Cond)]),
 		[{condition_start,measure_coverage(Cond)} | SubConds];
 	   true ->
 		SubConds

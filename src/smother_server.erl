@@ -86,7 +86,7 @@ handle_call({declare,File,Loc,Declaration},State) ->
 				     end,
 				     Content),
 		lists:keystore(Loc,1,FDict,{Loc,{receive_expr,Patterns}});
-	    {fun_case,F,Arity,Args,_Guard} ->
+	    {fun_case,F,Arity,Args,Guard} ->
 		%%io:format("Fun declaration ~p/~p ~p~n",[F,Arity,Loc]),
 		%%io:format("<~p, ~p> Function ~p/~p: ~p G:~p~n",[File,Loc,F,Arity,Args,Guard]),
 		%% ArgRecords = lists:map(fun ?MODULE:build_pattern_record/1,Args),
@@ -97,9 +97,9 @@ handle_call({declare,File,Loc,Declaration},State) ->
 			    {{StartLine,StartChar},{_EndLine,_EndChar}} = Loc,
 			    BStart = StartChar + length(atom_to_list(F)),
 			    BracketLoc = {{StartLine,BStart},{StartLine,BStart+1}},
-			    build_pattern_record({wrapper,nil,{attr,BracketLoc,[{range,BracketLoc}],none},{nil,BracketLoc}});
+			    build_pattern_record({[{wrapper,nil,{attr,BracketLoc,[{range,BracketLoc}],none},{nil,BracketLoc}}],Guard});
 			_ ->
-			    build_pattern_record(list_from_list(Args))
+			    build_pattern_record({[list_from_list(Args)],Guard})
 		    end,
                 AR2 = ArgRecords#pat_log{extras=[]},
 		%%Find function declaration and add a pattern...
