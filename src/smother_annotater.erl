@@ -91,7 +91,7 @@ get_tmp() ->
 	false ->
 	    case os:getenv("TMP") of
 		false ->
-		    "./";
+		    "/tmp/";
 		Dir ->
 		    Dir
 		end;
