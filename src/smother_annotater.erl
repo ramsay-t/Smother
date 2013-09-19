@@ -2,7 +2,7 @@
 
 -compile([export_all]).
 
--exports([annotate/2, get_forms/1, make_tmp_file/2]).
+-exports([annotate/2, get_forms/1, make_tmp_file/2, get_tmp/0]).
 
 -include_lib("wrangler/include/wrangler.hrl").
 

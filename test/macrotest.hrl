@@ -1,0 +1,1 @@
+-define(TEST_MAC,(A==0) and (B>4)).

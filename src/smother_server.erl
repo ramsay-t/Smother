@@ -123,35 +123,35 @@ handle_call({declare,File,Loc,Declaration},State) ->
 		FDict
 	end,
     {reply,ok,lists:keystore(File,1,State,{File,FDict2})};
-handle_call({analyse,File},State) ->
-    case lists:keyfind(File,1,State) of
-	{File,FDict} ->
+handle_call({analyse,Module},State) ->
+    case lists:keyfind(Module,1,State) of
+	{Module,FDict} ->
 	    Analysis = FDict,
 	    {reply,{ok,Analysis},State};
 	_ ->
-	    {reply,{error,no_record_found,File},State}
+	    {reply,{error,no_record_found,Module},State}
     end;
-handle_call({analyse,File,Loc},State) ->
-    case lists:keyfind(File,1,State) of
-	{File,FDict} ->
+handle_call({analyse,Module,Loc},State) ->
+    case lists:keyfind(Module,1,State) of
+	{Module,FDict} ->
 	    Analysis = lists:filter(fun({L,_V}) -> within_loc(Loc,L) end,FDict),
 	    {reply,{ok,Analysis},State};
 	_ ->
-	    {reply,{error,no_record_found,File},State}
+	    {reply,{error,no_record_found,Module},State}
     end;
-handle_call({analyse_to_file,File,Outfile},State) ->
-    case lists:keyfind(File,1,State) of
-	{File,FDict} ->
+handle_call({analyse_to_file,Module,Outfile},State) ->
+    case lists:keyfind(Module,1,State) of
+	{Module,FDict} ->
 	    case file:open(Outfile, [write]) of
 		{ok, OF} ->
-		    Result = smother_analysis:make_html_analysis(File,FDict,OF),
+		    Result = smother_analysis:make_html_analysis(code:which(Module),FDict,OF),
 		    file:close(OF),
 		    {reply,{Result,Outfile},State};
 		Error ->
 		    {reply,{error,Error},State}
 	    end;
 	_ ->
-	    {reply,{error,no_record_found,File},State}
+	    {reply,{error,no_record_found,Module},State}
     end;
 handle_call(Action,State) ->
     io:format("Unexpected call to the smother server: ~p~n", [Action]),
@@ -320,7 +320,7 @@ get_bool_subcomponents({wrapper,atom,_Attrs,_Atom}) ->
 get_bool_subcomponents({atom,_Line,true}) ->
     [];
 get_bool_subcomponents(V) ->
-    VList = tuple_to_list(V),
+    %%VList = tuple_to_list(V),
     %%io:format("Expression with ~p elements, starting with {~p,~p,... ",[length(VList),lists:nth(1,VList),lists:nth(2,VList)]),
     %%io:format("UNKNOWN bool expression type:~n~p~n~n", [V]),
     [].

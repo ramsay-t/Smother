@@ -8,21 +8,30 @@
 compile(Filename) ->
     compile(Filename,[]).
 
-compile(Filename,Includes) ->
-    wrangler_ast_server:start_ast_server(),
-    smother_server:clear(Filename),
-    AST2 = instrument(Filename),
-    Code = wrangler_prettypr:print_ast('unix',AST2),
-
+compile(Filename,Options) ->
     {ok, ModInfo} = api_refac:get_module_info(Filename),
     {module,ModName} = lists:keyfind(module,1,ModInfo),
+
+    wrangler_ast_server:start_ast_server(),
+    smother_server:clear(ModName),
+
+    Includes = [I || {i,I} <- Options],
+    TrueFile = case lists:filter(fun(O) -> O == preprocess end, Options) of
+		   [] ->
+		       Filename;
+		   _ ->
+		       make_pp_file(Filename,Includes)
+	       end,
+
+    AST2 = instrument(ModName,TrueFile),
+    Code = wrangler_prettypr:print_ast('unix',AST2),
 
     TmpFile = smother_annotater:make_tmp_file(ModName,Code),
     {ok,Forms} = epp:parse_file(TmpFile,Includes,[]),
 
     case compile:forms(Forms,[binary,debug_info,verbose,report_errors,report_warnings]) of
 	{ok,Module,Binary} ->
-	    code:load_binary(Module,Filename,Binary);
+	    code:load_binary(Module,TrueFile,Binary);
 	Error ->
 	    Error
     end.
@@ -94,7 +103,7 @@ rename_underscores(A) ->
 	    A 
     end.
 
-rules(File) ->
+rules(Module) ->
     [
      ?RULE(?T("f@(Args@@) when Guard@@ -> Body@@;"),
 	   begin
@@ -106,9 +115,9 @@ rules(File) ->
 	       reset_var_server(),
 	       NewArgs@@ = lists:map(fun rename_underscores/1, Args@@),
 	       Declare = {fun_case,FName,length(Args@@),Args@@,Guard@@},
-	       smother_server:declare(File,Loc,Declare),
+	       smother_server:declare(Module,Loc,Declare),
 	       %%NewBody@@ = sub_instrument(Body@@,rules(File)),
-	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[NewArgs@@]), Body@@;")
+	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[NewArgs@@]), Body@@;")
 	   end
 	   ,api_refac:type(_This@)/=attribute),
      ?RULE(?T("if Guards@@@ -> Body@@@ end"),
@@ -120,8 +129,8 @@ rules(File) ->
 	       VarList = lists:flatten(lists:map(fun(G) -> api_refac:free_var_names(G) end, Guards@@@)),
 	       VarListString = re:replace(lists:flatten(io_lib:format("~p", [VarList])),"'","",[{return,list},global]),
 	       Declare = {if_expr,VarList,Guards@@@},
-	       smother_server:declare(File,Loc,Declare),
-	       ?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
+	       smother_server:declare(Module,Loc,Declare),
+	       ?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
 
 
 
@@ -149,13 +158,13 @@ rules(File) ->
 							lists:flatten(io_lib:format("~p", [VarPairStringList]))
 							,"'","",[{return,list},global]
 						       ),"\"","'",[{return,list},global]),
-				    {NewP@@,[?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[SMOTHER_CASE_PATTERN | " ++ VarListString ++ "]), B@@ end")]}
+				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_CASE_PATTERN | " ++ VarListString ++ "]), B@@ end")]}
 			    end,
 			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
 			   )),
 
 	       Declare = {case_expr,lists:zip(Pats@@@,Guards@@@)},
-	       smother_server:declare(File,Loc,Declare),
+	       smother_server:declare(Module,Loc,Declare),
 
 	       ?TO_AST("case Expr@@ of NewPats@@@ when Guards@@@ -> NewBody@@@ end")
 	   end
@@ -182,13 +191,13 @@ rules(File) ->
 							lists:flatten(io_lib:format("~p", [VarPairStringList]))
 							,"'","",[{return,list},global]
 						       ),"\"","'",[{return,list},global]),
-				    {NewP@@,[?TO_AST("begin smother_server:log(\"" ++ File ++ "\"," ++ LocString ++ ",[SMOTHER_REC_PATTERN | " ++ VarListString ++ "]), B@@ end")]}
+				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_REC_PATTERN | " ++ VarListString ++ "]), B@@ end")]}
 			    end,
 			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
 			   )),
 
 	       Declare = {receive_expr,lists:zip(Pats@@@,Guards@@@)},
-	       smother_server:declare(File,Loc,Declare),
+	       smother_server:declare(Module,Loc,Declare),
 
 	       ?TO_AST("receive NewPats@@@ when Guards@@@ -> NewBody@@@ end")
 	   end
@@ -196,9 +205,9 @@ rules(File) ->
 
     ].
 	
-instrument(File) ->
+instrument(MName,File) ->
     {ok, AST} = api_refac:get_ast(File),
-    sub_instrument(AST,rules(File)).
+    sub_instrument(AST,rules(MName)).
 
 sub_instrument(AST,[]) ->
     AST;
@@ -223,3 +232,15 @@ get_percentage(File) ->
     smother_server:get_percentage(File).
 reset(File) ->
     smother_server:reset(File).
+
+make_pp_file(Filename,Includes) ->
+    {ok, ModInfo} = api_refac:get_module_info(Filename),
+    {module,ModName} = lists:keyfind(module,1,ModInfo),
+
+    {ok, Cont} = epp:parse_file(Filename,Includes,[]),
+    Code = lists:flatten([erl_prettypr:format(C) ++ "\n" || C <- Cont]),
+    
+    FName = smother_annotater:get_tmp() ++ atom_to_list(ModName) ++ ".epp",
+    io:format("Making ~p~n",[FName]),
+    file:write_file(FName,Code++"\n"),
+    FName.
