@@ -5,9 +5,15 @@
 
 -include_lib("wrangler/include/wrangler.hrl").
 
+%% @doc Read the specified source file, insert instrumentation, and load the module.
+%% All subsequent smother API calls should refer to the module name, rather than the source file.
 compile(Filename) ->
     compile(Filename,[]).
 
+%% @doc Read the specified source file, insert instrumentation, and load the module.
+%% Options inclue {i,Folder} to include folders, and the atom preprocess to run the preprocessor
+%% before analysing the source file. This will produce output based on the preprocssed source, which allows
+%% analysis of decisions containing macros etc.
 compile(Filename,Options) ->
     {ok, ModInfo} = api_refac:get_module_info(Filename),
     {module,ModName} = lists:keyfind(module,1,ModInfo),
@@ -36,24 +42,32 @@ compile(Filename,Options) ->
 	    Error
     end.
 
+%% @doc List all modules currently being instrumented.
 show_files() ->
     smother_server:show_files().
 
-analyse(File) ->
-    smother_server:analyse(File).
+%% @doc Access the analysis tree structure for a particular module.
+analyse(Module) ->
+    smother_server:analyse(Module).
 
-analyze(File) ->
-    analyse(File).
+%% @doc Access the analysis tree structure for a particular module.
+analyze(Module) ->
+    analyse(Module).
 
-analyse_to_file(File) ->
-    smother_server:analyse_to_file(File).
+%% @doc Produce an annotated HTML file showing MC/DC information.
+analyse_to_file(Module) ->
+    smother_server:analyse_to_file(Module).
 
-analyze_to_file(File) ->
-    analyse_to_file(File).
+%% @doc Produce an annotated HTML file showing MC/DC information.
+analyze_to_file(Module) ->
+    analyse_to_file(Module).
 
-analyse_to_file(File,OutFile) ->
-    smother_server:analyse_to_file(File,OutFile).
+%% @doc Produce an annotated HTML file showing MC/DC information.
+%% OutFile specifies the output file name.
+analyse_to_file(Module,OutFile) ->
+    smother_server:analyse_to_file(Module,OutFile).
 
+%% @hidden
 start_var_server() ->
     case global:whereis_name(smother_free_var_server) of
 	undefined ->
@@ -63,7 +77,8 @@ start_var_server() ->
 	PID ->
 	    PID
     end.
-    
+
+%% @hidden
 next_free_var_number() ->
     VS = start_var_server(),
     VS ! {req, self()},
@@ -72,11 +87,12 @@ next_free_var_number() ->
 	    lists:flatten(io_lib:format("~p", [V]))
     end.
 
+%% @hidden
 reset_var_server() ->
     VS = start_var_server(),
     VS ! reset.
 
-
+%% @hidden
 var_server(N) ->
     receive 
 	{req, From} ->
@@ -86,11 +102,13 @@ var_server(N) ->
 	    var_server(1)
     end.
 
+%% @ hidden
 fix_range({Type,Thing,{attr,Loc,Attrs,End},Image},OldAttrs) ->
     Range = smother_analysis:get_range(OldAttrs),
     NewAttrs = {attr,Loc,lists:keystore(range,1,Attrs,{range,Range}),End},
     {Type,Thing,NewAttrs,Image}.
 
+%% @hidden
 rename_underscores(A) ->
     case A of 
 	{wrapper,underscore,Attrs,_Image} ->
@@ -103,6 +121,8 @@ rename_underscores(A) ->
 	    A 
     end.
 
+%% @private
+%% @doc The mutation rules to insert instrumentation and "declare" the analysis point to the server.
 rules(Module) ->
     [
      ?RULE(?T("f@(Args@@) when Guard@@ -> Body@@;"),
@@ -116,7 +136,7 @@ rules(Module) ->
 	       NewArgs@@ = lists:map(fun rename_underscores/1, Args@@),
 	       Declare = {fun_case,FName,length(Args@@),Args@@,Guard@@},
 	       smother_server:declare(Module,Loc,Declare),
-	       %%NewBody@@ = sub_instrument(Body@@,rules(File)),
+	       %%NewBody@@ = sub_instrument(Body@@,rules(Module)),
 	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[NewArgs@@]), Body@@;")
 	   end
 	   ,api_refac:type(_This@)/=attribute),
@@ -205,10 +225,13 @@ rules(Module) ->
 
     ].
 	
+%% @private
+%% @doc Apply the instrumentation/analysis rules.
 instrument(MName,File) ->
     {ok, AST} = api_refac:get_ast(File),
     sub_instrument(AST,rules(MName)).
 
+%% @hidden
 sub_instrument(AST,[]) ->
     AST;
 sub_instrument(AST,[R | MoreRules]) ->
@@ -217,22 +240,34 @@ sub_instrument(AST,[R | MoreRules]) ->
     %%io:format("MADE ~p~n~n",[?PP(AST2)]),
     sub_instrument(AST2,MoreRules).
 
+%% @hidden
 get_loc_string(_This@) ->
     Loc = api_refac:start_end_loc(_This@),
     lists:flatten(io_lib:format("~p", [Loc])).
 
+%% @doc Produce a list of MC/DC tree leaves that have not been covered.
+get_zeros(Module) ->
+    smother_server:get_zeros(Module).
+%% @doc Produce a list of MC/DC tree leaves that have been covered.
+%% This is the complement of get_zeros(Module).
+get_nonzeros(Module) ->
+    smother_server:get_nonzeros(Module).
+%% @doc Show the counts of zeros and non-zeros.
+%% Produces a pair of integers, the first being the count of uncovered MC/DC tree leaves, 
+%% the second is the count of covered MC/DC leaves. 
+%% This gives a useful, quick measure of coverage in both percentage and absolute terms.
+get_split(Module) ->
+    smother_server:get_split(Module).
+%% @doc Returns the percentage of coverage.
+%% Calculated as the size of the list returned by get_nonzeros, against the sum of that list
+%% plus the list of zeros. 
+get_percentage(Module) ->
+    smother_server:get_percentage(Module).
+%% @doc Clears all analysis data for the specified module.
+reset(Module) ->
+    smother_server:reset(Module).
 
-get_zeros(File) ->
-    smother_server:get_zeros(File).
-get_nonzeros(File) ->
-    smother_server:get_nonzeros(File).
-get_split(File) ->
-    smother_server:get_split(File).
-get_percentage(File) ->
-    smother_server:get_percentage(File).
-reset(File) ->
-    smother_server:reset(File).
-
+%% @hidden
 make_pp_file(Filename,Includes) ->
     {ok, ModInfo} = api_refac:get_module_info(Filename),
     {module,ModName} = lists:keyfind(module,1,ModInfo),
