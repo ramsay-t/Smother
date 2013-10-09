@@ -1,5 +1,5 @@
 -module(smother).
--export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1]).
+-export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1,get_reports/1]).
 
 -export([var_server/1]).
 
@@ -279,3 +279,13 @@ make_pp_file(Filename,Includes) ->
     io:format("Making ~p~n",[FName]),
     file:write_file(FName,Code++"\n"),
     FName.
+
+%% @doc Produces readable analysis reports.
+%% This returns a list of analysis_report records for each of the program analysis points.
+%% analysis_report sub-components, such as matchedsubs, contain further analysis_report records
+%% and the analysis_report record itself contains context information. 
+get_reports(Module) ->
+    {ok,FDict} = analyse(Module),
+    smother_analysis:get_reports(FDict).
+
+    

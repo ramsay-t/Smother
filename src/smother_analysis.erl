@@ -282,7 +282,7 @@ get_analysis_from_subs(Cond = #bool_log{},FLoc) ->
     R2 =
 	if FLoc == Start ->
                 %%io:format("==> ~p~n",[measure_coverage(Cond)]),
-		[{condition_start,measure_coverage(Cond)} | SubConds];
+		[{condition_start,measure_coverage(Cond,[])} | SubConds];
 	   true ->
 		SubConds
 	end,
@@ -306,7 +306,7 @@ get_analysis_from_subs(Cond = #pat_log{},FLoc) ->
 	end,
     R2 =
 	if FLoc == Start ->
-		[{condition_start,measure_coverage(Cond)} | SubConds];
+		[{condition_start,measure_coverage(Cond,[])} | SubConds];
 	   true ->
 		SubConds
 	end,
@@ -336,13 +336,15 @@ merge_branches({condition_start,#analysis_report{exp=LExp,loc=LLoc,context=LCtx,
 	    exit({"merging different expressions",LExp,RExp});
        not (LLoc==RLoc) ->
 	    exit({"Merging different locations",LLoc,RLoc});
-       not (LCtx==RCtx) ->
-	    exit({"Merging different contexts",LCtx,RCtx});
+       %%not (LCtx==RCtx) ->
+       %%	    exit({"Merging different contexts",LCtx,RCtx});
        true ->
+	    %% FIXME - this wants to be the locations but not the statements, since it will merge non-matched and matched
+	    NewCtx = LCtx ++ RCtx,
 	    MRep = #analysis_report{
 	      exp=LExp,
 	      loc=LLoc,
-	      context=LCtx,
+	      context=NewCtx,
 	      matched=LM+RM,
 	      nonmatched=LNM+RNM,
 	      matchedsubs=merge_coverage(LMS,RMS),
@@ -371,90 +373,114 @@ merge_coverage(L,R) ->
   exit({"Merging different coverage.",{L,R}}).
 
 %% Measures coverage and returns a quad: {Match count, NonMatch count, Subs average matched, Subs average unmatched}
-measure_coverage(#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}}=Exp,tcount=TCount}) ->
+measure_coverage(#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}}=Exp,tcount=TCount},Context) ->
     #analysis_report{
-       exp=?PP(Exp),
-       loc=get_range(Exp),
-       matched=TCount,
-       nonmatched=-1
-      };
-measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,exp={tree,infix_expr,_Attrs,{infix_expr,{tree,operator,_OpAttrs,Image},_Left,_Right}}=Exp}) ->
-    MSubs = lists:map(fun measure_coverage/1, TSubs),
-    NMSubs = lists:map(fun measure_coverage/1, FSubs),
-    Report = #analysis_report{
-		exp=?PP(Exp),
-		loc=get_range(Exp),
-		matched=TCount,
-		nonmatched=FCount,
-		matchedsubs=MSubs,
-		nonmatchedsubs=NMSubs,
-		msubsproportion=coverage_average(MSubs),
-		nmsubsproportion=coverage_average(NMSubs)
-	       };
-measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,exp=Exp}) ->
-    MSubs = lists:map(fun measure_coverage/1, TSubs),
-    NMSubs = lists:map(fun measure_coverage/1, FSubs),
+		  exp=?PP(Exp),
+		  context=Context,
+		  loc=get_range(Exp),
+		  matched=TCount,
+		  nonmatched=-1
+		 };
+measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,exp={tree,infix_expr,_Attrs,{infix_expr,{tree,operator,_OpAttrs,Image},_Left,_Right}}=Exp},Context) ->
+    Loc=get_range(Exp),
+    MSubs = lists:map(fun(S) -> measure_coverage(S,Context++[{true,Loc}]) end, TSubs),
+    NMSubs = lists:map(fun(S) -> measure_coverage(S,Context++[{false,Loc}]) end, FSubs),
+    TMSubs = case Image of
+		 'and' ->
+		     [];
+		 _ ->
+		     MSubs
+	     end,
+    TNMSubs = case Image of
+		  'or' ->
+		      [];
+		  _ ->
+		      NMSubs
+	      end,
     #analysis_report{
-       exp=?PP(Exp),
-       loc=get_range(Exp),
-       matched=TCount,
-       nonmatched=FCount,
-       matchedsubs=MSubs,
-       nonmatchedsubs=NMSubs,
-       msubsproportion=coverage_average(MSubs),
-       nmsubsproportion=coverage_average(NMSubs)
-      };
-measure_coverage(#pat_log{mcount=MCount,exp={wrapper,underscore,_Attrs,_Image}=Exp}) ->
+		      exp=?PP(Exp),
+		      context=Context,
+		      loc=get_range(Exp),
+		      matched=TCount,
+		      nonmatched=FCount,
+		      matchedsubs=TMSubs,
+		      nonmatchedsubs=TNMSubs,
+		      msubsproportion=coverage_average(TMSubs),
+		      nmsubsproportion=coverage_average(TNMSubs)
+		    };
+measure_coverage(#bool_log{exp=Exp,tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs},Context) ->
+    Loc=get_range(Exp),
+    MSubs = lists:map(fun(S) -> measure_coverage(S,Context++[{true,Loc}]) end, TSubs),
+    NMSubs = lists:map(fun(S) -> measure_coverage(S,Context++[{false,Loc}]) end, FSubs),
     #analysis_report{
-       exp=?PP(Exp),
-       loc=get_range(Exp),
-       type=pat,
-       matched=MCount,
-       nonmatched=-1
-      };
-measure_coverage(#pat_log{mcount=MCount,exp={wrapper,variable,_Attrs,_Image}=Exp}) ->
+		      exp=?PP(Exp),
+		      context=Context,
+		      loc=get_range(Exp),
+		      matched=TCount,
+		      nonmatched=FCount,
+		      matchedsubs=MSubs,
+		      nonmatchedsubs=NMSubs,
+		      msubsproportion=coverage_average(MSubs),
+		      nmsubsproportion=coverage_average(NMSubs)
+		    };
+measure_coverage(#pat_log{mcount=MCount,exp={wrapper,underscore,_Attrs,_Image}=Exp},Context) ->
     #analysis_report{
-       exp=?PP(Exp),
-       loc=get_range(Exp),
-       type=pat,
-       matched=MCount,
-       nonmatched=-1
-      };
-measure_coverage(#pat_log{mcount=MCount,exp={wrapper,nil,_Attrs,_Image}=Exp}) ->
+		  exp=?PP(Exp),
+		  context=Context,
+		  loc=get_range(Exp),
+		  type=pat,
+		  matched=MCount,
+		  nonmatched=-1
+		 };
+measure_coverage(#pat_log{mcount=MCount,exp={wrapper,variable,_Attrs,_Image}=Exp},Context) ->
     #analysis_report{
-       exp=?PP(Exp),
-       loc=get_range(Exp),
-       type=pat,
-       matched=MCount,
-       nonmatched=-1
-      };
-measure_coverage(#pat_log{mcount=MCount,nmcount=NMCount,subs=Subs,extras=Extras,exp=Exp}) ->
-    NMSubs = lists:map(fun measure_coverage/1, Subs),
-    ESubs = lists:map(fun measure_coverage/1, Extras),
+		  exp=?PP(Exp),
+		  context=Context,
+		  loc=get_range(Exp),
+		  type=pat,
+		  matched=MCount,
+		  nonmatched=-1
+		 };
+measure_coverage(#pat_log{mcount=MCount,exp={wrapper,nil,_Attrs,_Image}=Exp},Context) ->
     #analysis_report{
-       exp=?PP(Exp),
-       loc=get_range(Exp),
-       type=pat,
-       matched=MCount,
-       nonmatched=NMCount,
-       nonmatchedsubs=NMSubs,
-       matchedsubs=ESubs,
-       nmsubsproportion=coverage_average(NMSubs),
-       msubsproportion=coverage_average(ESubs)
-      };
-measure_coverage({Name,MCount,NMCount}) ->
+		  exp=?PP(Exp),
+		  context=Context,
+		  loc=get_range(Exp),
+		  type=pat,
+		  matched=MCount,
+		  nonmatched=-1
+		 };
+measure_coverage(#pat_log{exp=Exp,mcount=MCount,nmcount=NMCount,subs=Subs,extras=Extras},Context) ->
+    Loc = get_range(Exp),
+    NMSubs = lists:map(fun(S) -> measure_coverage(S,Context++[{non_matched,Loc}]) end, Subs),
+    ESubs = lists:map(fun(S) -> measure_coverage(S,Context++[{extra,Loc}]) end, Extras),
+    #analysis_report{
+		      exp=?PP(Exp),
+		      context=Context,
+		      loc=get_range(Exp),
+		      type=pat,
+		      matched=MCount,
+		      nonmatched=NMCount,
+		      nonmatchedsubs=NMSubs,
+		      matchedsubs=ESubs,
+		      nmsubsproportion=coverage_average(NMSubs),
+		      msubsproportion=coverage_average(ESubs)
+		    };
+measure_coverage({Name,MCount,NMCount},Context) ->
     %% Extras
     #analysis_report{
-       exp=lists:flatten(io_lib:format("~p",[Name])),
-       type=pat,
-       matched=MCount,
-       nonmatched=NMCount
-      };
-measure_coverage(Unk) ->
-    io:format("Unhandled coverage measure: ~p~n", [Unk]),
+		  exp=lists:flatten(io_lib:format("~p",[Name])),
+		  context=Context,
+		  type=extra,
+		  matched=MCount,
+		  nonmatched=NMCount
+		 };
+measure_coverage(Unk,Context) ->
+    io:format("Unhandled coverage measure: ~p [Context:~p]~n", [Unk,Context]),
     #analysis_report{
-       exp=lists:flatten(io_lib:format("~p",[Unk]))
-      }.
+	       exp=lists:flatten(io_lib:format("~p",[Unk])),
+	       context=Context
+	      }.
 
 %% Create a numeric average of the coverages from a list of conds
 coverage_average(List) ->
@@ -595,19 +621,54 @@ get_reports([{Loc, {receive_expr,Patterns}} | More],Context) ->
     get_reports(Patterns,Context) ++ get_reports(More,Context);
 get_reports([{Loc, {fun_expr,F,Arity,Patterns}} | More],Context) ->
     get_reports(Patterns,Context) ++ get_reports(More,Context);
-get_reports([L = #bool_log{} | More],Context) ->
-    LReport = measure_coverage(L),
+get_reports([L = #bool_log{exp=Exp,tsubs=TSubs,fsubs=FSubs} | More],Context) ->
+    LReport = measure_coverage(L,Context),
+    Loc = get_range(Exp),
+    MergedSubs = merge_evals(TSubs,FSubs),
     [ LReport#analysis_report{context=Context}
-     | get_reports(More)];
-get_reports([L = #pat_log{} | More],Context) ->
-    LReport = measure_coverage(L),
+     | get_reports(MergedSubs,Context++[Loc]) ++ get_reports(More,Context)];
+get_reports([L = #pat_log{subs=Subs,extras=Extras,matchedsubs=MatchedSubs} | More],Context) ->
+    LReport = measure_coverage(L,Context),
     [ LReport#analysis_report{context=Context}
-     | get_reports(More)];
+     | get_reports(More,Context)];
 get_reports([{Loc,L=#pat_log{}} | More],Context) ->
-    LReport = measure_coverage(L),
+    LReport = measure_coverage(L,Context),
     [ LReport#analysis_report{context=Context}
-     | get_reports(More)];
+     | get_reports(More,Context)];
 get_reports([E | More],Context) ->
     io:format("Unhandled report: ~p~n",[E]),
     [].
 
+
+merge_evals([],[]) ->
+    [];
+merge_evals([#bool_log{exp=LExp,tcount=LTC,fcount=LFC,tsubs=LTS,fsubs=LFS}|LMore],[#bool_log{exp=RExp,tcount=RTC,fcount=RFC,tsubs=RTS,fsubs=RFS}|RMore]) ->
+    if not (LExp==RExp) ->
+	    exit({"Merging miss-matched logs",?PP(LExp),?PP(RExp)});
+       true ->
+	    [#bool_log{
+		exp=LExp,
+		tcount=LTC+RTC,
+		fcount=LFC+RFC,
+		tsubs=merge_evals(LTS,RTS),
+		fsubs=merge_evals(LFS,RFS)
+	       }   
+	     | merge_evals(LMore,RMore)]
+    end;
+merge_evals([#pat_log{exp=LExp,guards=LGS,mcount=LMC,nmcount=LNMC,subs=LS,extras=LE,matchedsubs=LMS} | LMore],[#pat_log{exp=RExp,guards=RGS,mcount=RMC,nmcount=RNMC,subs=RS,extras=RE,matchedsubs=RMS} | RMore]) -> 
+    if not (LExp==RExp) ->
+	    exit({"Merging miss-matched logs",?PP(LExp),?PP(RExp)});
+       true ->
+	    [#pat_log{
+		exp=LExp,
+		guards=merge_evals(LGS,RGS),
+		mcount=LMC+RMC,
+		nmcount=LNMC+RNMC,
+		subs=merge_evals(LS,RS),
+		extras=merge_evals(LE,RE),
+		matchedsubs=merge_evals(LMS,RMS)
+	       }
+	     | merge_evals(LMore,RMore)]
+    end;
+merge_evals(_,_) ->    
+    exit("Merging unequal branches").
