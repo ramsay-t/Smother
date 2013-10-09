@@ -1,6 +1,8 @@
 -record(analysis_report,
 	{
 	  exp,
+	  loc={{0,0},{0,0}},
+	  context=[],
 	  type=bool,
 	  matched=0,
 	  nonmatched=0,

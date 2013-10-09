@@ -10,12 +10,15 @@
 
 -export([build_pattern_record/1,build_bool_record/1,within_loc/2]).
 
+%% @private
 init(Dict) ->
     {ok,Dict}.
 
+%% @private
 handle_call(Action,_From,State) ->
     handle_call(Action,State).
 
+%% @private
 handle_call(show_files,State) ->
     Files = lists:map(fun({File,FD}) -> File end, State),
     {reply,Files,State};
@@ -157,6 +160,7 @@ handle_call(Action,State) ->
     io:format("Unexpected call to the smother server: ~p~n", [Action]),
     {reply,unknown_call,State}.
 
+%% @private
 handle_cast(stop,S) ->
     {stop,normal,S};
 handle_cast({log,File,Loc,LogData},State) ->
@@ -211,13 +215,16 @@ handle_cast(M,S) ->
     io:format("Unexpected cast msg to smother server:~w~n", [M]),
     {noreply,S}.
 
+%% @private
 terminate(normal,_State) ->
     ok.
 
+%% @private
 handle_info(Info,State) ->
     io:format("Smother server recieved information: ~p~n",[Info]),
     {noreply,State}.
 
+%% @private
 code_change(_OldVsn,State,_Extra) ->
     {ok,State}.
 

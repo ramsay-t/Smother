@@ -1,5 +1,5 @@
 -module(smother_analysis).
--export([make_html_analysis/3,get_range/1,get_zeros/1,get_nonzeros/1,get_percentage/1]).
+-export([make_html_analysis/3,get_range/1,get_zeros/1,get_nonzeros/1,get_percentage/1,get_reports/1]).
 
 -include_lib("wrangler/include/wrangler.hrl").
 -include("include/eval_records.hrl").
@@ -329,17 +329,25 @@ analyse_both_branches(MBranch, NMBranch) ->
     Pairs = lists:zip(MBranch,NMBranch),
     lists:map(fun({M,NM}) -> merge_branches(M,NM) end, Pairs).
 
-merge_branches({condition_start,#analysis_report{exp=LExp,matched=LM,nonmatched=LNM,matchedsubs=LMS,nonmatchedsubs=LNMS}},{condition_start,#analysis_report{exp=RExp,matched=RM,nonmatched=RNM,matchedsubs=RMS,nonmatchedsubs=RNMS}}) ->
+merge_branches({condition_start,#analysis_report{exp=LExp,loc=LLoc,context=LCtx,matched=LM,nonmatched=LNM,matchedsubs=LMS,nonmatchedsubs=LNMS}},{condition_start,#analysis_report{exp=RExp,loc=RLoc,context=RCtx,matched=RM,nonmatched=RNM,matchedsubs=RMS,nonmatchedsubs=RNMS}}) ->
+    %% Merging should always be done on separate reports for the same
+    %% code section, so any difference is cause to totally die.
     if not (LExp==RExp) ->
 	    exit({"merging different expressions",LExp,RExp});
+       not (LLoc==RLoc) ->
+	    exit({"Merging different locations",LLoc,RLoc});
+       not (LCtx==RCtx) ->
+	    exit({"Merging different contexts",LCtx,RCtx});
        true ->
 	    MRep = #analysis_report{
-		      exp=LExp,
-		      matched=LM+RM,
-		      nonmatched=LNM+RNM,
-                      matchedsubs=merge_coverage(LMS,RMS),
-                      nonmatchedsubs=merge_coverage(LNMS,RNMS)		      
-		     },
+	      exp=LExp,
+	      loc=LLoc,
+	      context=LCtx,
+	      matched=LM+RM,
+	      nonmatched=LNM+RNM,
+	      matchedsubs=merge_coverage(LMS,RMS),
+	      nonmatchedsubs=merge_coverage(LNMS,RNMS)		      
+	     },
 	    {condition_start,MRep}
     end;
 merge_branches({condition_end},{condition_end}) ->
@@ -366,6 +374,7 @@ merge_coverage(L,R) ->
 measure_coverage(#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}}=Exp,tcount=TCount}) ->
     #analysis_report{
        exp=?PP(Exp),
+       loc=get_range(Exp),
        matched=TCount,
        nonmatched=-1
       };
@@ -374,6 +383,7 @@ measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,e
     NMSubs = lists:map(fun measure_coverage/1, FSubs),
     Report = #analysis_report{
 		exp=?PP(Exp),
+		loc=get_range(Exp),
 		matched=TCount,
 		nonmatched=FCount,
 		matchedsubs=MSubs,
@@ -385,17 +395,19 @@ measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,e
     MSubs = lists:map(fun measure_coverage/1, TSubs),
     NMSubs = lists:map(fun measure_coverage/1, FSubs),
     #analysis_report{
-		exp=?PP(Exp),
-		matched=TCount,
-		nonmatched=FCount,
-		matchedsubs=MSubs,
-		nonmatchedsubs=NMSubs,
-		msubsproportion=coverage_average(MSubs),
-		nmsubsproportion=coverage_average(NMSubs)
-	       };
+       exp=?PP(Exp),
+       loc=get_range(Exp),
+       matched=TCount,
+       nonmatched=FCount,
+       matchedsubs=MSubs,
+       nonmatchedsubs=NMSubs,
+       msubsproportion=coverage_average(MSubs),
+       nmsubsproportion=coverage_average(NMSubs)
+      };
 measure_coverage(#pat_log{mcount=MCount,exp={wrapper,underscore,_Attrs,_Image}=Exp}) ->
     #analysis_report{
        exp=?PP(Exp),
+       loc=get_range(Exp),
        type=pat,
        matched=MCount,
        nonmatched=-1
@@ -403,6 +415,7 @@ measure_coverage(#pat_log{mcount=MCount,exp={wrapper,underscore,_Attrs,_Image}=E
 measure_coverage(#pat_log{mcount=MCount,exp={wrapper,variable,_Attrs,_Image}=Exp}) ->
     #analysis_report{
        exp=?PP(Exp),
+       loc=get_range(Exp),
        type=pat,
        matched=MCount,
        nonmatched=-1
@@ -410,6 +423,7 @@ measure_coverage(#pat_log{mcount=MCount,exp={wrapper,variable,_Attrs,_Image}=Exp
 measure_coverage(#pat_log{mcount=MCount,exp={wrapper,nil,_Attrs,_Image}=Exp}) ->
     #analysis_report{
        exp=?PP(Exp),
+       loc=get_range(Exp),
        type=pat,
        matched=MCount,
        nonmatched=-1
@@ -418,15 +432,16 @@ measure_coverage(#pat_log{mcount=MCount,nmcount=NMCount,subs=Subs,extras=Extras,
     NMSubs = lists:map(fun measure_coverage/1, Subs),
     ESubs = lists:map(fun measure_coverage/1, Extras),
     #analysis_report{
-		exp=?PP(Exp),
-		type=pat,
-		matched=MCount,
-		nonmatched=NMCount,
-		nonmatchedsubs=NMSubs,
-		matchedsubs=ESubs,
-		nmsubsproportion=coverage_average(NMSubs),
-		msubsproportion=coverage_average(ESubs)
-	       };
+       exp=?PP(Exp),
+       loc=get_range(Exp),
+       type=pat,
+       matched=MCount,
+       nonmatched=NMCount,
+       nonmatchedsubs=NMSubs,
+       matchedsubs=ESubs,
+       nmsubsproportion=coverage_average(NMSubs),
+       msubsproportion=coverage_average(ESubs)
+      };
 measure_coverage({Name,MCount,NMCount}) ->
     %% Extras
     #analysis_report{
@@ -566,3 +581,33 @@ get_percentage(Analysis) ->
      true ->
        (NonZeros / Total) * 100
   end.
+
+get_reports(FDict) ->
+    get_reports(FDict,[]).
+
+get_reports([],_Context) ->
+    [];
+get_reports([{Loc,{case_expr,Content}} | More],Context) ->
+    get_reports(Content,Context) ++ get_reports(More,Context);
+get_reports([{Loc, {if_expr,_VarNames,ExpRecords}} | More],Context) ->
+    get_reports(ExpRecords,Context) ++ get_reports(More,Context);
+get_reports([{Loc, {receive_expr,Patterns}} | More],Context) ->
+    get_reports(Patterns,Context) ++ get_reports(More,Context);
+get_reports([{Loc, {fun_expr,F,Arity,Patterns}} | More],Context) ->
+    get_reports(Patterns,Context) ++ get_reports(More,Context);
+get_reports([L = #bool_log{} | More],Context) ->
+    LReport = measure_coverage(L),
+    [ LReport#analysis_report{context=Context}
+     | get_reports(More)];
+get_reports([L = #pat_log{} | More],Context) ->
+    LReport = measure_coverage(L),
+    [ LReport#analysis_report{context=Context}
+     | get_reports(More)];
+get_reports([{Loc,L=#pat_log{}} | More],Context) ->
+    LReport = measure_coverage(L),
+    [ LReport#analysis_report{context=Context}
+     | get_reports(More)];
+get_reports([E | More],Context) ->
+    io:format("Unhandled report: ~p~n",[E]),
+    [].
+
