@@ -469,12 +469,12 @@ get_reports([L = #bool_log{exp=Exp,tsubs=TSubs,fsubs=FSubs} | More],Context) ->
     MergedSubs = merge_evals(TSubs,FSubs),
     [ LReport#analysis_report{context=Context}
      | get_reports(MergedSubs,Context++[Loc]) ++ get_reports(More,Context)];
-get_reports([L = #pat_log{exp=Exp,subs=Subs,matchedsubs=MatchedSubs} | More],Context) ->
+get_reports([L = #pat_log{exp=Exp,guards=Gs,subs=Subs,matchedsubs=MatchedSubs} | More],Context) ->
     LReport = measure_coverage(L,Context),
     Loc = get_range(Exp),
     MergedSubs = merge_evals(Subs,MatchedSubs),
     [ LReport#analysis_report{context=Context}
-     | get_reports(MergedSubs,Context++[Loc]) ++ get_reports(More,Context)];
+     | get_reports(MergedSubs,Context++[Loc]) ++ get_reports(lists:flatten(Gs),Context++[Loc]) ++ get_reports(More,Context)];
 get_reports([{_Loc,L=#pat_log{}} | More],Context) ->
     get_reports([L | More],Context);
 get_reports([E | More],Context) ->
@@ -512,5 +512,13 @@ merge_evals([#pat_log{exp=LExp,guards=LGS,mcount=LMC,nmcount=LNMC,subs=LS,extras
 	       }
 	     | merge_evals(LMore,RMore)]
     end;
-merge_evals(_,_) ->    
-    exit("Merging unequal branches").
+merge_evals([{LEName,LMC,LNMC} | LMore],[{REName,RMC,RNMC} | RMore]) ->
+    %% Extras
+    if not (LEName == REName) ->
+	    exit({"Merging miss-matched extras",LEName,REName});
+       true ->
+	    [{LEName,LMC+RMC,LNMC+RNMC}
+	     | merge_evals(LMore,RMore)]
+    end;
+merge_evals(A,B) ->    
+    exit({"Merging unequal branches",A,B}).
