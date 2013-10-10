@@ -38,7 +38,7 @@ make_html_analysis(File,FDict,OF) ->
 <script src=\"http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js\"></script>
 <script type=\"text/javascript\">
 function tipfun() {
-  return $(this).prop('title');
+		 return $(this).prop('title');
 }
 
 $(document).ready(function() {
@@ -53,8 +53,17 @@ $(document).ready(function() {
 <pre>
 ",[]),
 	
+    Reports = lists:sort(fun(#analysis_report{loc={{LSLine,LSChar},_}},
+                             #analysis_report{loc={{RSLine,RSChar},_}}) -> 
+                                       if LSLine == RSLine -> 
+                                                LSChar =< RSChar; 
+                                          true -> 
+                                                LSLine < RSLine 
+                                       end 
+                         end, 
+                         get_reports(FDict)),
     {ok,IF} = file:open(File,[read]),
-    ok = analyse_to_html(IF,OF,FDict,{1,1}),
+    ok = analyse_to_html(IF,OF,Reports,{1,1}),
     file:close(IF),
     io:fwrite(OF,"
 </pre>
@@ -65,7 +74,7 @@ $(document).ready(function() {
     ok.
 
 
-analyse_to_html(IF,OF,FDict,{FLocLine,FLocChar} = FLoc) ->
+analyse_to_html(IF,OF,Reports,{FLocLine,FLocChar} = FLoc) ->
     case file:read(IF,1) of
 	eof ->
 	    ok;
@@ -73,32 +82,47 @@ analyse_to_html(IF,OF,FDict,{FLocLine,FLocChar} = FLoc) ->
 	    {error, Reason};
 	{ok, "\n"} ->
 	    io:fwrite(OF,"\n",[]),
-	    analyse_to_html(IF,OF,FDict,{FLocLine+1,1});
+	    analyse_to_html(IF,OF,Reports,{FLocLine+1,1});
 	{ok, "\t"} ->
 	    io:fwrite(OF,"\t",[]),
-	    analyse_to_html(IF,OF,FDict,{FLocLine,FLocChar+8});
+	    analyse_to_html(IF,OF,Reports,{FLocLine,FLocChar+8});
 	{ok, Data} ->
 	    %%io:format("~p: ~p~n",[FLoc,Data]),
-	    case get_analysis(FDict,FLoc) of
-		none ->
-		    io:fwrite(OF,Data,[]),
-		    analyse_to_html(IF,OF,FDict,{FLocLine,FLocChar+1});
-		{conditions,List} ->
-		    Ends = lists:filter(fun(T) -> element(1,T) == condition_end end, List),
-		    Starts = lists:filter(fun(T) -> element(1,T) == condition_start end, List),
-		    lists:map(fun({condition_start,Coverage}) -> 
-				      Report = make_report(Coverage),
-				      io:fwrite(OF,"~s",[Report])
-			      end, Starts),
-		    io:fwrite(OF,"~s",[Data]),
-		    lists:map(fun(_) -> io:fwrite(OF,"</span>",[]) end, Ends),
-		    analyse_to_html(IF,OF,FDict,{FLocLine,FLocChar+1})
-	    end;
+	    {Starts,Ends,NewReports} = get_relevant(Reports,FLoc),
+	    lists:map(fun(R) ->
+			      RHTML = make_report_html(R),
+			      io:fwrite(OF,"~s",[RHTML])
+		      end,
+		      Starts),
+	    io:fwrite(OF,Data,[]),
+	    lists:map(fun(_R) ->
+			      io:fwrite(OF,"</span>",[])
+		      end,
+		      Ends),
+	    analyse_to_html(IF,OF,NewReports,{FLocLine,FLocChar+1});
 	Err ->
 	    {error, Err}
 	end.
 
-make_report(Coverage=#analysis_report{type=bool}) ->
+get_relevant([],_FLoc) ->
+    {[],[],[]};
+get_relevant([#analysis_report{loc={Start,End}}=R | MoreReports],FLoc) ->
+    {SubStart,SubEnd,SubNew} = get_relevant(MoreReports,FLoc),
+    if Start==FLoc ->
+	    %% Single-character patterns are possible - e.g. "_"
+	    if End==FLoc ->
+		    {[R | SubStart],[R | SubEnd],SubNew};
+	       true ->
+		    {[R | SubStart],SubEnd,[R | SubNew]}
+	    end;
+       End==FLoc ->
+	    %% Deliberately drops R from the NewReports, we don't need to consider it once we are past the end of it...
+	    {SubStart,[R | SubEnd],SubNew};
+       true ->
+	    {SubStart,SubEnd,[R | SubNew]}
+    end.
+
+make_report_html(Coverage=#analysis_report{type=bool}) ->
     %% io:format("Making messages for ~s (~p,~p)~n",[Coverage#analysis_report.exp,length(Coverage#analysis_report.matchedsubs),length(Coverage#analysis_report.nonmatchedsubs)]),
     Class = determine_class(Coverage),
 
@@ -132,7 +156,7 @@ make_report(Coverage=#analysis_report{type=bool}) ->
 				      ])),
     DeQMsg = re:replace(Msg,"\"","\\&quot;",[{return,list},global]),
     lists:flatten(io_lib:format("<span class=\"condition ~p\" title=\"~s\">",[Class,DeQMsg]));
-make_report(Coverage=#analysis_report{type=pat}) ->
+make_report_html(Coverage=#analysis_report{type=pat}) ->
     %%io:format("Making messages for ~s~n",[Coverage#analysis_report.exp]),
 
     Class = determine_class(Coverage),
@@ -238,139 +262,6 @@ colourise(N,Scale) ->
 	      io_lib:format("<font color=green>~p</font>",[N*Scale])
       end
      ).
-
-get_analysis(FDict,FLoc) ->
-    case lists:filter(fun ({Loc, _Cond}) -> 
-			      smother_server:within_loc(Loc,{FLoc,FLoc})
-		      end, FDict) of
-	[] ->
-	    none;
-	List ->
-	    {conditions,lists:flatten(lists:map(fun({{_Start,_End}, Cond}) ->
-							%% The Dict entires always have the 
-							%% declared content as the last component,
-							%% except function cases, which are a bit weirder...
-							case Cond of
-							    {fun_expr,_Name,_Arity,Patterns} ->
-								lists:map(fun({_Loc,Content}) ->
-										  get_analysis_from_subs(Content,FLoc) 
-									  end, Patterns);
-							    _ ->
-								L = tuple_to_list(Cond),
-								Content = lists:nth(length(L),L),
-								lists:map(fun(C) -> 
-										  get_analysis_from_subs(C,FLoc) 
-									  end, Content)
-							end
-						end,
-						List))}
-    end.
-
-get_analysis_from_subs(Cond = #bool_log{},FLoc) ->
-    %%io:format("Analysing Guard for ~p: ~p~n", [FLoc,get_range(Cond#bool_log.exp)]),
-    {Start, End} = get_range(Cond#bool_log.exp),
-    SubConds = analyse_both_branches(
-		 lists:flatten(lists:map(fun(Sub) -> get_analysis_from_subs(Sub,FLoc) end, Cond#bool_log.tsubs))
-		 , 
-		 lists:flatten(lists:map(fun(Sub) -> get_analysis_from_subs(Sub,FLoc) end, Cond#bool_log.fsubs))),
-    %% A single char pattern can both start and end at the same time...
-    R1 = 
-	if FLoc == End ->
-		[{condition_end} | SubConds];
-	   true -> []
-	end,
-    R2 =
-	if FLoc == Start ->
-                %%io:format("==> ~p~n",[measure_coverage(Cond)]),
-		[{condition_start,measure_coverage(Cond,[])} | SubConds];
-	   true ->
-		SubConds
-	end,
-    R1 ++ R2;
-get_analysis_from_subs(Cond = #pat_log{},FLoc) ->
-    {Start, End} = get_range(Cond#pat_log.exp),
-    SubConds = analyse_both_branches(
-		 lists:flatten(lists:map(fun(Sub) -> get_analysis_from_subs(Sub,FLoc) end, Cond#pat_log.subs)),
-		 lists:flatten(lists:map(fun(Sub) -> get_analysis_from_subs(Sub,FLoc) end, Cond#pat_log.matchedsubs))),
-
-    %% Add Guards...
-    GuardItems = lists:flatten(lists:map(fun(G) -> 
-						 get_analysis_from_subs(G, FLoc)
-					 end,
-					 lists:flatten(Cond#pat_log.guards))
-			      ),
-    R1 = 
-	if FLoc == End ->
-		[{condition_end} | SubConds];
-	   true -> []
-	end,
-    R2 =
-	if FLoc == Start ->
-		[{condition_start,measure_coverage(Cond,[])} | SubConds];
-	   true ->
-		SubConds
-	end,
-    R1 ++ R2 ++ GuardItems;
-get_analysis_from_subs(Cond,_FLoc) ->
-    io:format("UNHANDLED analysis sub: ~p~n",[Cond]),
-    [].
-
-analyse_both_branches([], []) ->
-    [];
-analyse_both_branches([[]], [[]]) ->
-    [];
-analyse_both_branches([], B) ->
-    B;
-analyse_both_branches(B, []) ->
-    B;
-analyse_both_branches(MBranch, NMBranch) ->
-    %% Assume (??) that each side will have the same order. It should, since they are usually built as copies
-    %% If this was Ocaml I could just use map2...
-    Pairs = lists:zip(MBranch,NMBranch),
-    lists:map(fun({M,NM}) -> merge_branches(M,NM) end, Pairs).
-
-merge_branches({condition_start,#analysis_report{exp=LExp,loc=LLoc,context=LCtx,matched=LM,nonmatched=LNM,matchedsubs=LMS,nonmatchedsubs=LNMS}},{condition_start,#analysis_report{exp=RExp,loc=RLoc,context=RCtx,matched=RM,nonmatched=RNM,matchedsubs=RMS,nonmatchedsubs=RNMS}}) ->
-    %% Merging should always be done on separate reports for the same
-    %% code section, so any difference is cause to totally die.
-    if not (LExp==RExp) ->
-	    exit({"merging different expressions",LExp,RExp});
-       not (LLoc==RLoc) ->
-	    exit({"Merging different locations",LLoc,RLoc});
-       %%not (LCtx==RCtx) ->
-       %%	    exit({"Merging different contexts",LCtx,RCtx});
-       true ->
-	    %% FIXME - this wants to be the locations but not the statements, since it will merge non-matched and matched
-	    NewCtx = LCtx ++ RCtx,
-	    MRep = #analysis_report{
-	      exp=LExp,
-	      loc=LLoc,
-	      context=NewCtx,
-	      matched=LM+RM,
-	      nonmatched=LNM+RNM,
-	      matchedsubs=merge_coverage(LMS,RMS),
-	      nonmatchedsubs=merge_coverage(LNMS,RNMS)		      
-	     },
-	    {condition_start,MRep}
-    end;
-merge_branches({condition_end},{condition_end}) ->
-    {condition_end};
-merge_branches(M,NM) ->
-    io:format("Don't know how to merge ~p and ~p~n",[M,NM]),
-    [].
-
-merge_coverage([],[]) ->
-  [];
-merge_coverage([#analysis_report{exp=Exp,matched=LM,nonmatched=LNM,matchedsubs=LMS,nonmatchedsubs=LNMS}| LMore],[#analysis_report{exp=RExp,matched=RM,nonmatched=RNM,matchedsubs=RMS,nonmatchedsubs=RNMS} | RMore]) ->
-  [#analysis_report{
-		      exp=Exp,
-		      matched=LM+RM,
-		      nonmatched=LNM+RNM,
-                      matchedsubs=merge_coverage(LMS,RMS),
-                      nonmatchedsubs=merge_coverage(LNMS,RNMS)		      
-		     } 
-   | merge_coverage(LMore, RMore)];
-merge_coverage(L,R) ->
-  exit({"Merging different coverage.",{L,R}}).
 
 %% Measures coverage and returns a quad: {Match count, NonMatch count, Subs average matched, Subs average unmatched}
 measure_coverage(#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}}=Exp,tcount=TCount},Context) ->
@@ -518,86 +409,37 @@ get_range(R) ->
     io:format("Er, Whut? Getting range from something weird...~n~p~n", [R]), 
     {{0,0},{0,0}}.
 
-get_zeros(A) ->
-  get_zs(zero,A).
-get_nonzeros(A) ->
-  get_zs(nonzero,A).
+get_zeros(FDict) ->
+    Reports = get_reports(FDict),
+    get_zs(zero,Reports).
 
-get_zs(_V,[]) ->
-    [];
-get_zs(V,[{Loc,{case_expr,Content}} | More]) ->
-    lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, Content)) ++ get_zs(V,More);
-get_zs(V,[{Loc,{if_expr,_VarNames,Content}} | More]) ->
-    lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, Content)) ++ get_zs(V,More);
-get_zs(V,[{Loc,{receive_expr,Content}} | More]) ->
-    lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, Content)) ++ get_zs(V,More);
-get_zs(V,[{Loc,{fun_expr,F,Arity,Patterns}} | More]) ->
-    lists:flatten(lists:map(fun(C) -> get_z_leaves(V,C) end, lists:map(fun(P) -> element(2,P) end, Patterns))) ++ get_zs(V,More);
-get_zs(V,C) ->
-    exit({unimplemented_get_zs,C}). 
+get_nonzeros(FDict) ->
+    Reports = get_reports(FDict),
+    get_zs(nonzero,Reports).
 
- 
-
-get_z_leaves(V, #pat_log{exp=Exp,mcount=MCount,nmcount=NMCount,subs=NMSubs,extras=Extras}) ->
-    MZs = z_context(matched,Exp,lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,Extras))),
-    MZ = if (V == zero) and (MCount == 0) ->
-               [{never_matched,get_range(Exp),[]}];
-            (V /= zero) and (MCount > 0) ->
-               [{matched,get_range(Exp),[]}];
-           true ->
-	       []
-         end,
-    NMZs = z_context(non_matched,Exp,lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,NMSubs))),
-    NMZ =      
-        if (V == zero) and (MCount == 0) ->
-               [{never_non_matched,get_range(Exp),[]}];
-           (V /= zero) and (MCount > 0) ->
-                [{non_matched,get_range(Exp),[]}];
-           true ->
-	       []
-         end,
-    MZ ++ MZs ++ NMZ ++ NMZs;
-get_z_leaves(V, #bool_log{exp=Exp,tcount=TCount,fcount=FCount,fsubs=FSubs,tsubs=TSubs}) ->
-    TZs = z_context(true,Exp,lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,TSubs))),
-    TZ = if (V == zero) and (TCount == 0) ->
-               [{never_true,get_range(Exp),[]}];
-           (V /= zero) and (TCount > 0) ->
-               [{true,get_range(Exp),[]}];
-           true ->
-	       []
-         end,
-    FZs = z_context(false,Exp,lists:flatten(lists:map(fun(S) -> get_z_leaves(V,S) end,FSubs))),
-    FZ =      
-        if (V == zero) and (FCount == 0) ->
-               [{never_false,get_range(Exp),[]}];
-           (V /= zero) and (FCount > 0) ->
-               [{false,get_range(Exp),[]}];
-           true ->
-	       []
-         end,
-    TZ ++ TZs ++ FZ ++ FZs;
-get_z_leaves(V, {Extra,MCount,NMCount}) ->
-    MC = if (V == zero) and (MCount == 0) ->
-          [{never_used_extra,Extra,[]}];
-        (V /= zero) and (MCount > 0) ->
-          [{used_extra,Extra,[]}];
-      true ->
-          []
-    end,
-    NMC = if (V == zero) and (NMCount == 0) ->
-             [{never_unused_extra,Extra,[]}];
-           (V /= zero) and (NMCount > 0) ->
-             [{unused_extra,Extra,[]}];
-           true ->
-             []
-    end,
-    MC ++ NMC;
-get_z_leaves(V, C) ->
-    exit({unimplemented_get_leaves,C}). 
-
-z_context(Status, Exp, Zs) ->
-	       E = get_range(Exp),
-	       [{MNM,R,[{Status, E} | Ctx]} || {MNM,R,Ctx} <- Zs].
+get_zs(V,Reports) ->
+    lists:flatten(
+      lists:map(fun(#analysis_report{loc=Loc,context=Ctx,matched=M,nonmatched=NM,matchedsubs=MSubs,nonmatchedsubs=NMSubs}) ->
+			MRes = if (V == zero) and (M == 0) ->
+				       [{never_matched,Loc,Ctx}];
+				  (V /= zero) and (M > 0) ->
+				       [{matched,Loc,Ctx}];
+				  true ->
+				       []
+			       end,
+			NMRes = if (V == zero) and (NM == 0) ->
+					[{never_non_matched,Loc,Ctx}];
+				   (V /= zero) and (NM > 0) ->
+					[{non_matched,Loc,Ctx}];
+				   true ->
+					[]
+				end,
+			MSRes = get_zs(V,MSubs),
+			NMSRes = get_zs(V,NMSubs),
+			MRes ++ NMRes ++ MSRes ++ NMSRes
+		end,
+		Reports)
+     ).
 
 get_percentage(Analysis) ->
   Zeros = length(get_zeros(Analysis)),
@@ -613,13 +455,13 @@ get_reports(FDict) ->
 
 get_reports([],_Context) ->
     [];
-get_reports([{Loc,{case_expr,Content}} | More],Context) ->
+get_reports([{_Loc,{case_expr,Content}} | More],Context) ->
     get_reports(Content,Context) ++ get_reports(More,Context);
-get_reports([{Loc, {if_expr,_VarNames,ExpRecords}} | More],Context) ->
+get_reports([{_Loc, {if_expr,_VarNames,ExpRecords}} | More],Context) ->
     get_reports(ExpRecords,Context) ++ get_reports(More,Context);
-get_reports([{Loc, {receive_expr,Patterns}} | More],Context) ->
+get_reports([{_Loc, {receive_expr,Patterns}} | More],Context) ->
     get_reports(Patterns,Context) ++ get_reports(More,Context);
-get_reports([{Loc, {fun_expr,F,Arity,Patterns}} | More],Context) ->
+get_reports([{_Loc, {fun_expr,_F,_Arity,Patterns}} | More],Context) ->
     get_reports(Patterns,Context) ++ get_reports(More,Context);
 get_reports([L = #bool_log{exp=Exp,tsubs=TSubs,fsubs=FSubs} | More],Context) ->
     LReport = measure_coverage(L,Context),
@@ -627,17 +469,17 @@ get_reports([L = #bool_log{exp=Exp,tsubs=TSubs,fsubs=FSubs} | More],Context) ->
     MergedSubs = merge_evals(TSubs,FSubs),
     [ LReport#analysis_report{context=Context}
      | get_reports(MergedSubs,Context++[Loc]) ++ get_reports(More,Context)];
-get_reports([L = #pat_log{subs=Subs,extras=Extras,matchedsubs=MatchedSubs} | More],Context) ->
+get_reports([L = #pat_log{exp=Exp,subs=Subs,matchedsubs=MatchedSubs} | More],Context) ->
     LReport = measure_coverage(L,Context),
+    Loc = get_range(Exp),
+    MergedSubs = merge_evals(Subs,MatchedSubs),
     [ LReport#analysis_report{context=Context}
-     | get_reports(More,Context)];
-get_reports([{Loc,L=#pat_log{}} | More],Context) ->
-    LReport = measure_coverage(L,Context),
-    [ LReport#analysis_report{context=Context}
-     | get_reports(More,Context)];
+     | get_reports(MergedSubs,Context++[Loc]) ++ get_reports(More,Context)];
+get_reports([{_Loc,L=#pat_log{}} | More],Context) ->
+    get_reports([L | More],Context);
 get_reports([E | More],Context) ->
-    io:format("Unhandled report: ~p~n",[E]),
-    [].
+    io:format("Unhandled report: ~p in context ~p~n",[E,Context]),
+    get_reports(More,Context).
 
 
 merge_evals([],[]) ->
