@@ -1,3 +1,0 @@
-{application,smother}.
-{packages,[]}.
-{modules,[smother,smother_analysis,smother_annotater,smother_server]}.
