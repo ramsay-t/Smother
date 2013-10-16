@@ -35,6 +35,8 @@ compile(Filename,Options) ->
     TmpFile = smother_annotater:make_tmp_file(ModName,Code),
     {ok,Forms} = epp:parse_file(TmpFile,Includes,[]),
 
+    smother_server:store_zero(),
+
     case compile:forms(Forms,[binary,debug_info,verbose,report_errors,report_warnings]) of
 	{ok,Module,Binary} ->
 	    code:load_binary(Module,TrueFile,Binary);

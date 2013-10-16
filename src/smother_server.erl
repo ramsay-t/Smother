@@ -10,6 +10,8 @@
 
 -export([build_pattern_record/1,build_bool_record/1,within_loc/2]).
 
+-export([store_zero/0]).
+
 %% @private
 init(Dict) ->
     {ok,Dict}.
@@ -24,13 +26,14 @@ handle_call(show_files,State) ->
     {reply,Files,State};
 handle_call({clear,File},State) ->
     {reply,ok,lists:keystore(File,1,State,{File,[]})};
-handle_call({reset,File},State) ->
-    FDict = case lists:keyfind(File,1,State) of
-		false -> [];
-		{File, FD} -> FD
-	    end,
-    NewFDict = reset_entries(FDict),
-    {reply,ok,lists:keystore(File,1,State,{File,NewFDict})};
+handle_call({reset, Module}, State) ->
+  OldDict = case get({zero_state, Module}) of
+              X when is_list(X) -> X;
+              _                 -> [] end,
+  {reply, ok, lists:keystore(Module, 1, State, {Module, OldDict})};
+handle_call(store_zero, State) ->
+  [ put({zero_state, F}, S) || {F, S} <- State ],
+  {reply, ok, State};
 handle_call({declare,File,Loc,Declaration},State) ->
     %%io:format("Declaration in ~p~n",[File]),
     FDict = case lists:keyfind(File,1,State) of
@@ -253,6 +256,9 @@ analyse_to_file(File) ->
     
 reset(File) ->    
    gen_server:call({global,smother_server},{reset,File}).
+
+store_zero() ->
+   gen_server:call({global, smother_server}, store_zero).
 
 declare(File,Loc,Declaration) ->
     start_if_needed(),
@@ -701,32 +707,3 @@ get_percentage(File) ->
 	 {ok,Analysis} ->
 	     smother_analysis:get_percentage(Analysis)
     end.
-
-reset_entries([]) ->
-		  [];
-reset_entries([{Loc,Dec} | More]) ->
-    NewDec = 	case Dec of
-    	   	 {fun_expr,Name,Arity,Patterns} ->
-								V = 	  {fun_expr,Name,Arity,
-									  lists:map(fun({Loc,Content}) ->
-						  				 {Loc,hd(reset_entries([Content]))} 
-									  end, Patterns)
-									  };
-							    _ ->
-								L = tuple_to_list(Dec),
-								Content = lists:nth(length(L),L),
-								NewContent = reset_entries(Content),
-								{NHead,_} = lists:split(length(L)-1,L),
-								list_to_tuple(NHead ++ [NewContent])
-							end,
-    [{Loc,NewDec} | reset_entries(More)];
-reset_entries([#bool_log{}=P | More]) ->
-			    
-			    [P#bool_log{tcount=0,fcount=0,tsubs=reset_entries(P#bool_log.tsubs),fsubs=reset_entries(P#bool_log.fsubs)} | reset_entries(More)];
-reset_entries([#pat_log{}=P | More]) ->
-			    [P#pat_log{mcount=0,nmcount=0,subs=reset_entries(P#pat_log.subs),guards=reset_entries(P#pat_log.guards),extras=reset_entries(P#pat_log.extras),matchedsubs=reset_entries(P#pat_log.matchedsubs)} | reset_entries(More)];
-reset_entries([{Extra,_M,_NM} | More]) ->
-    [{Extra,0,0} | reset_entries(More)];
-reset_entries([E | More]) ->
-    io:format("Cannot reset ~p~n",[E]),
-    [E | reset_entries(More)].
