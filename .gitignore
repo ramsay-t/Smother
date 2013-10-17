@@ -1,0 +1,14 @@
+.eunit
+deps
+*.o
+*.beam
+*.plt
+abcasetest.COVER.html
+abiftest.COVER.html
+erl_crash.dump
+test/abcasetest.erl-SMOTHER.html
+test/abiftest.erl-SMOTHER.html
+test/ablisttest.erl-SMOTHER.html
+test/abtest.erl-SMOTHER.html
+test/aoverb.erl-SMOTHER.html
+*~
