@@ -319,6 +319,8 @@ mailbox_size() ->
 wait_for_logging_to_finish() ->
    wait_for_logging(mailbox_size()).
 
+wait_for_logging({error,smother_not_started}) ->
+    {error,smother_not_started};
 wait_for_logging(MBS) -> 
     if MBS =< 0 ->
 	    ok;

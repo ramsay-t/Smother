@@ -148,7 +148,7 @@ make_report_html(Coverage=#analysis_report{type=bool}) ->
 ~s
 ",
 				      [
-				       Coverage#analysis_report.exp,
+				       ?PP(Coverage#analysis_report.exp),
 				       colourise(Coverage#analysis_report.matched),
 				       colourise(Coverage#analysis_report.nonmatched),
 				       MatchMsg,
