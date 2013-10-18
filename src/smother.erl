@@ -46,27 +46,33 @@ compile(Filename,Options) ->
 
 %% @doc List all modules currently being instrumented.
 show_files() ->
+    wait_for_logging_to_finish(),
     smother_server:show_files().
 
 %% @doc Access the analysis tree structure for a particular module.
 analyse(Module) ->
+    wait_for_logging_to_finish(),
     smother_server:analyse(Module).
 
 %% @doc Access the analysis tree structure for a particular module.
 analyze(Module) ->
+    wait_for_logging_to_finish(),
     analyse(Module).
 
 %% @doc Produce an annotated HTML file showing MC/DC information.
 analyse_to_file(Module) ->
+    wait_for_logging_to_finish(),
     smother_server:analyse_to_file(Module).
 
 %% @doc Produce an annotated HTML file showing MC/DC information.
 analyze_to_file(Module) ->
+    wait_for_logging_to_finish(),
     analyse_to_file(Module).
 
 %% @doc Produce an annotated HTML file showing MC/DC information.
 %% OutFile specifies the output file name.
 analyse_to_file(Module,OutFile) ->
+    wait_for_logging_to_finish(),
     smother_server:analyse_to_file(Module,OutFile).
 
 %% @hidden
@@ -249,24 +255,29 @@ get_loc_string(_This@) ->
 
 %% @doc Produce a list of MC/DC tree leaves that have not been covered.
 get_zeros(Module) ->
+    wait_for_logging_to_finish(),
     smother_server:get_zeros(Module).
 %% @doc Produce a list of MC/DC tree leaves that have been covered.
 %% This is the complement of get_zeros(Module).
 get_nonzeros(Module) ->
+    wait_for_logging_to_finish(),
     smother_server:get_nonzeros(Module).
 %% @doc Show the counts of zeros and non-zeros.
 %% Produces a pair of integers, the first being the count of uncovered MC/DC tree leaves, 
 %% the second is the count of covered MC/DC leaves. 
 %% This gives a useful, quick measure of coverage in both percentage and absolute terms.
 get_split(Module) ->
+    wait_for_logging_to_finish(),
     smother_server:get_split(Module).
 %% @doc Returns the percentage of coverage.
 %% Calculated as the size of the list returned by get_nonzeros, against the sum of that list
 %% plus the list of zeros. 
 get_percentage(Module) ->
+    wait_for_logging_to_finish(),
     smother_server:get_percentage(Module).
 %% @doc Clears all analysis data for the specified module.
 reset(Module) ->
+    wait_for_logging_to_finish(),
     smother_server:reset(Module).
 
 %% @hidden
@@ -287,12 +298,18 @@ make_pp_file(Filename,Includes) ->
 %% analysis_report sub-components, such as matchedsubs, contain further analysis_report records
 %% and the analysis_report record itself contains context information. 
 get_reports(Module) ->
+    wait_for_logging_to_finish(),
     {ok,FDict} = analyse(Module),
     smother_analysis:get_reports(FDict).
 
     
 mailbox_size() ->
-    element(2,hd(erlang:process_info(global:whereis_name(smother_server),[message_queue_len]))).
+    case global:whereis_name(smother_server) of
+	undefined ->
+	    {error, smother_not_started};
+	PID ->
+	    element(2,hd(erlang:process_info(PID,[message_queue_len])))
+    end.
 
 %% @doc Waits for all log messages to be processed.
 %% Instrumentation can generate massive numbers of logging messages, so even after testing is complete
@@ -306,6 +323,7 @@ wait_for_logging(MBS) ->
     if MBS =< 0 ->
 	    ok;
        true ->
+	    io:format("Waiting for the smother_server mailbox to clear...[~p messages]~n",[MBS]),
 	    timer:sleep(1000),
 	    wait_for_logging(mailbox_size())
     end.
