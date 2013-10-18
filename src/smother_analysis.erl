@@ -1,5 +1,5 @@
 -module(smother_analysis).
--export([make_html_analysis/3,get_range/1,get_zeros/1,get_nonzeros/1,get_percentage/1,get_reports/1]).
+-export([make_html_analysis/3,get_range/1,get_zeros/1,get_nonzeros/1,get_percentage/1,get_reports/1,exp_printer/1]).
 
 -include_lib("wrangler/include/wrangler.hrl").
 -include("include/eval_records.hrl").
@@ -148,7 +148,7 @@ make_report_html(Coverage=#analysis_report{type=bool}) ->
 ~s
 ",
 				      [
-				       ?PP(Coverage#analysis_report.exp),
+				       exp_printer(Coverage#analysis_report.exp),
 				       colourise(Coverage#analysis_report.matched),
 				       colourise(Coverage#analysis_report.nonmatched),
 				       MatchMsg,
@@ -183,7 +183,7 @@ make_report_html(Coverage=#analysis_report{type=pat}) ->
 ~s
 ",
 				      [
-				       ?PP(Coverage#analysis_report.exp),
+				       exp_printer(Coverage#analysis_report.exp),
 				       colourise(Coverage#analysis_report.matched),
 				       colourise(Coverage#analysis_report.nonmatched),
 				       NonMatchMsg,
@@ -233,7 +233,8 @@ make_msg(Status,Proportion,SubProportion,Reports) ->
 	 end,
     if length(Reports) > 0 ->
 	    MatchReports = lists:map(fun(#analysis_report{exp=Exp,matched=M,nonmatched=NM}) -> 
-					     io_lib:format("<tr><td>~s</td><td>~s</td><td>~s</td></tr>",[?PP(Exp),colourise(M),colourise(NM)]) 
+					     EString = exp_printer(Exp),
+					     io_lib:format("<tr><td>~s</td><td>~s</td><td>~s</td></tr>",[EString,colourise(M),colourise(NM)]) 
 				     end,
 				     Reports),
 	    io_lib:format("<div>
@@ -522,3 +523,16 @@ merge_evals([{LEName,LMC,LNMC} | LMore],[{REName,RMC,RNMC} | RMore]) ->
     end;
 merge_evals(A,B) ->    
     exit({"Merging unequal branches",A,B}).
+
+exp_printer(Exp) ->
+    case io_lib:printable_list(Exp) of
+	true ->
+	    Exp;
+	_ ->
+	    case io_lib:printable_unicode_list(Exp) of
+		true ->
+		    Exp;
+		_ ->
+		    ?PP(Exp)
+	    end
+    end.
