@@ -183,7 +183,7 @@ make_report_html(Coverage=#analysis_report{type=pat}) ->
 ~s
 ",
 				      [
-				       Coverage#analysis_report.exp,
+				       ?PP(Coverage#analysis_report.exp),
 				       colourise(Coverage#analysis_report.matched),
 				       colourise(Coverage#analysis_report.nonmatched),
 				       NonMatchMsg,
@@ -266,7 +266,7 @@ colourise(N,Scale) ->
 %% Measures coverage and returns a quad: {Match count, NonMatch count, Subs average matched, Subs average unmatched}
 measure_coverage(#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}}=Exp,tcount=TCount},Context) ->
     #analysis_report{
-		  exp=?PP(Exp),
+		  exp=Exp,
 		  context=Context,
 		  loc=get_range(Exp),
 		  matched=TCount,
@@ -289,7 +289,7 @@ measure_coverage(#bool_log{tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs=FSubs,e
 		      NMSubs
 	      end,
     #analysis_report{
-		      exp=?PP(Exp),
+		      exp=Exp,
 		      context=Context,
 		      loc=get_range(Exp),
 		      matched=TCount,
@@ -304,7 +304,7 @@ measure_coverage(#bool_log{exp=Exp,tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs
     MSubs = lists:map(fun(S) -> measure_coverage(S,Context++[{true,Loc}]) end, TSubs),
     NMSubs = lists:map(fun(S) -> measure_coverage(S,Context++[{false,Loc}]) end, FSubs),
     #analysis_report{
-		      exp=?PP(Exp),
+		      exp=Exp,
 		      context=Context,
 		      loc=get_range(Exp),
 		      matched=TCount,
@@ -316,7 +316,7 @@ measure_coverage(#bool_log{exp=Exp,tcount=TCount,fcount=FCount,tsubs=TSubs,fsubs
 		    };
 measure_coverage(#pat_log{mcount=MCount,exp={wrapper,underscore,_Attrs,_Image}=Exp},Context) ->
     #analysis_report{
-		  exp=?PP(Exp),
+		  exp=Exp,
 		  context=Context,
 		  loc=get_range(Exp),
 		  type=pat,
@@ -325,7 +325,7 @@ measure_coverage(#pat_log{mcount=MCount,exp={wrapper,underscore,_Attrs,_Image}=E
 		 };
 measure_coverage(#pat_log{mcount=MCount,exp={wrapper,variable,_Attrs,_Image}=Exp},Context) ->
     #analysis_report{
-		  exp=?PP(Exp),
+		  exp=Exp,
 		  context=Context,
 		  loc=get_range(Exp),
 		  type=pat,
@@ -334,7 +334,7 @@ measure_coverage(#pat_log{mcount=MCount,exp={wrapper,variable,_Attrs,_Image}=Exp
 		 };
 measure_coverage(#pat_log{mcount=MCount,exp={wrapper,nil,_Attrs,_Image}=Exp},Context) ->
     #analysis_report{
-		  exp=?PP(Exp),
+		  exp=Exp,
 		  context=Context,
 		  loc=get_range(Exp),
 		  type=pat,
@@ -346,7 +346,7 @@ measure_coverage(#pat_log{exp=Exp,mcount=MCount,nmcount=NMCount,subs=Subs,extras
     NMSubs = lists:map(fun(S) -> measure_coverage(S,Context++[{non_matched,Loc}]) end, Subs),
     ESubs = lists:map(fun(S) -> measure_coverage(S,Context++[{extra,Loc}]) end, Extras),
     #analysis_report{
-		      exp=?PP(Exp),
+		      exp=Exp,
 		      context=Context,
 		      loc=get_range(Exp),
 		      type=pat,
