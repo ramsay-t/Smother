@@ -233,7 +233,7 @@ make_msg(Status,Proportion,SubProportion,Reports) ->
 	 end,
     if length(Reports) > 0 ->
 	    MatchReports = lists:map(fun(#analysis_report{exp=Exp,matched=M,nonmatched=NM}) -> 
-					     io_lib:format("<tr><td>~s</td><td>~s</td><td>~s</td></tr>",[Exp,colourise(M),colourise(NM)]) 
+					     io_lib:format("<tr><td>~s</td><td>~s</td><td>~s</td></tr>",[?PP(Exp),colourise(M),colourise(NM)]) 
 				     end,
 				     Reports),
 	    io_lib:format("<div>
