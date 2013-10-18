@@ -1,5 +1,5 @@
 -module(smother).
--export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1,get_reports/1]).
+-export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1,get_reports/1,mailbox_size/0,wait_for_logging_to_finish/0]).
 
 -export([var_server/1]).
 
@@ -291,3 +291,23 @@ get_reports(Module) ->
     smother_analysis:get_reports(FDict).
 
     
+mailbox_size() ->
+    element(2,hd(erlang:process_info(global:whereis_name(smother_server),[message_queue_len]))).
+
+%% @doc Waits for all log messages to be processed.
+%% Instrumentation can generate massive numbers of logging messages, so even after testing is complete
+%% it can take some time for the smother_server mailbox to empty. This function will check the mailbox size
+%% and wait until it empties. This is useful, since any functions that rely on the server will result in
+%% gen_server call timeouts if the get stuck in the mailbox queue for too long.
+wait_for_logging_to_finish() ->
+   wait_for_logging(mailbox_size()).
+
+wait_for_logging(MBS) -> 
+    if MBS =< 0 ->
+	    ok;
+       true ->
+	    timer:sleep(1000),
+	    wait_for_logging(mailbox_size())
+    end.
+
+       

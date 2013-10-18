@@ -150,7 +150,8 @@ handle_call({analyse_to_file,Module,Outfile},State) ->
 	{Module,FDict} ->
 	    case file:open(Outfile, [write]) of
 		{ok, OF} ->
-		    Result = smother_analysis:make_html_analysis(code:which(Module),FDict,OF),
+		    Source = code:which(Module),
+		    Result = smother_analysis:make_html_analysis(Source,FDict,OF),
 		    file:close(OF),
 		    {reply,{Result,Outfile},State};
 		Error ->
@@ -255,10 +256,12 @@ analyse_to_file(File) ->
     gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}).
     
 reset(File) ->    
-   gen_server:call({global,smother_server},{reset,File}).
+    start_if_needed(),
+    gen_server:call({global,smother_server},{reset,File}).
 
 store_zero() ->
-   gen_server:call({global, smother_server}, store_zero).
+    start_if_needed(),
+    gen_server:call({global, smother_server}, store_zero).
 
 declare(File,Loc,Declaration) ->
     start_if_needed(),
