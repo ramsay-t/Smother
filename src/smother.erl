@@ -5,7 +5,6 @@
 
 -include_lib("wrangler/include/wrangler.hrl").
 
-
 %% @doc Read the specified source file, insert instrumentation, and load the module.
 %% All subsequent smother API calls should refer to the module name, rather than the source file.
 compile(Filename) ->
@@ -323,7 +322,8 @@ wait_for_logging_to_finish() ->
 wait_for_logging(MBS) -> 
     if MBS =< 0 ->
 	    ok;
-       MBS < 100 ->
+       MBS < 500 ->
+	    timer:sleep(50),
 	    wait_for_logging(mailbox_size());
        true ->
 	    io:format("Waiting for the smother_server mailbox to clear...[~p messages]~n",[MBS]),
