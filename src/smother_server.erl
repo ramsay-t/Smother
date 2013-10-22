@@ -22,7 +22,7 @@ handle_call(Action,_From,State) ->
 
 %% @private
 handle_call(show_files,State) ->
-    Files = lists:map(fun({File,FD}) -> File end, State),
+    Files = lists:map(fun({File,_FD}) -> File end, State),
     {reply,Files,State};
 handle_call({clear,File},State) ->
     {reply,ok,lists:keystore(File,1,State,{File,[]})};
@@ -79,13 +79,13 @@ handle_call({declare,File,Loc,Declaration},State) ->
 		     ),
 		lists:keystore(Loc,1,FDict,{Loc,{if_expr,VarNames,ExpRecords}});
 	    {case_expr,Content} ->
-		ExpRecords = lists:map(fun({P,G}=C) ->
+		ExpRecords = lists:map(fun({_P,_G}=C) ->
 					     build_pattern_record(C)
 				     end,
 				     Content),
 		lists:keystore(Loc,1,FDict,{Loc,{case_expr,ExpRecords}});
 	    {receive_expr,Content} ->
-		Patterns = lists:map(fun({P,G}=C) ->
+		Patterns = lists:map(fun({_P,_G}=C) ->
 					     build_pattern_record(C)
 				     end,
 				     Content),
@@ -183,7 +183,7 @@ handle_cast({log,File,Loc,LogData},State) ->
 			    NewPatterns = apply_fun_log(Loc,LogData,Patterns),
 			    NewFDict = lists:keystore(ParentLoc,1,FDict,{ParentLoc,{fun_expr,F,Arity,NewPatterns}}),
 			    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
-			D ->
+			_D ->
 			    io:format("No relevant condition for location ~p~n",[Loc]),
 			    lists:map(fun({L,_R}) -> 
 					      io:format("    ~p vs ~p <~p>~n",[L, Loc, L == Loc])
@@ -327,7 +327,7 @@ get_bool_subcomponents({tree,infix_expr,_Attrs,{infix_expr,Op,Left,Right}}) ->
 	false ->
 	    []
     end;
-get_bool_subcomponents([_V | _VMore] = VList) ->
+get_bool_subcomponents([_V | _VMore] = _VList) ->
     %%io:format("Got a list with ~p elements...~n", [length(VList)]),
     %% FIXME comma,semicolon syntax.....
     [];
@@ -335,7 +335,7 @@ get_bool_subcomponents({wrapper,atom,_Attrs,_Atom}) ->
     [];
 get_bool_subcomponents({atom,_Line,true}) ->
     [];
-get_bool_subcomponents(V) ->
+get_bool_subcomponents(_V) ->
     %%VList = tuple_to_list(V),
     %%io:format("Expression with ~p elements, starting with {~p,~p,... ",[length(VList),lists:nth(1,VList),lists:nth(2,VList)]),
     %%io:format("UNKNOWN bool expression type:~n~p~n~n", [V]),
@@ -355,7 +355,7 @@ get_pattern_subcomponents({wrapper,nil,_Attrs,_Image}) ->
     [];
 get_pattern_subcomponents({fun_declaration,_Loc,Args}) ->
     Args;
-get_pattern_subcomponents(V) ->
+get_pattern_subcomponents(_V) ->
     %%io:format("UNKNOWN pattern expression type:~n~p~n~n", [V]),
     [].
 
@@ -414,11 +414,11 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 	%%io:format("Got back: ~p~n",[NewBindings]),
 
 	%% Now check for guard matches...
-	%%io:format("Pattern match, now need to match ~p guards under ~p...~n",[length(PatLog#pat_log.guards), NewBindings]),
 	{Result,NewGuards} = 
 	    try 
 		match_guards(Guards,Bindings++NewBindings)
-	    catch error:{unbound_var,_} ->
+	    catch error:{unbound_var,V} ->
+		    io:format("Error: unbound var ~p~n",[V]),
 		    {fail,Guards}
 	    end,
 
@@ -438,7 +438,7 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 		[NewPat | apply_pattern_log(EVal,Es,Bindings)]
 	end
     catch
-	error:Msg ->
+	error:_Msg ->
 	    %%io:format("Non-Match!  ~p~n",[Msg]),
 	    %%io:format("No Match: ~p vs ~p~n~p~n",[revert(PatLog#pat_log.exp),ValStx,Msg]),
 	    case process_subs(PatLog,EVal,Bindings) of
@@ -467,7 +467,6 @@ match_guards([],_Bindings) ->
 match_guards([#bool_log{}=G | Gs], Bindings) ->
     {SubRes, NewGs} = match_guards(Gs,Bindings),
     NewLog = hd(apply_bool_log(Bindings,[G],true)),
-    %% io:format("Tested ~p : ~p vs ~p~n",[?PP(NewLog#bool_log.exp),NewLog#bool_log.tcount,G#bool_log.tcount]),
     if NewLog#bool_log.tcount > G#bool_log.tcount ->
 	    %% Matched...
 	    {SubRes, [NewLog | NewGs]};
@@ -489,9 +488,7 @@ match_guards([Gs | MoreGs],Bindings) ->
 match_guards(G, _Bindings) ->
     io:format("Wait, what...? ~p~n",[G]).
 
-%%process_subs(_E,[],_Eval,_Bindings) ->
 process_subs(#pat_log{exp={tree,tuple,_Attrs,Content}=_Exp,subs=Subs},EVal,Bindings) ->
-    %%io:format("Trying to evaluate ~p~n with ~p under ~p~n",[Exp,EVal,Bindings]),
     case abstract_revert(EVal) of
 	{tuple,_OLine,ValContent} ->
 	    if length(Content) /= length(ValContent) ->
@@ -510,7 +507,6 @@ process_subs(#pat_log{exp={tree,tuple,_Attrs,Content}=_Exp,subs=Subs},EVal,Bindi
 		    {NewSubs, no_extras}
 	    end;
 	_Val ->
-	    %%io:format("~p is not a tuple...~n",[Val]),
 	    {Subs,not_a_tuple}
     end;
 process_subs(#pat_log{exp={wrapper,integer,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
@@ -543,7 +539,7 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content},subs=Subs},EVal,Bindings) 
 	       true ->
 		    {Subs, no_extras}
 	    end;
-	{string,Line,Content} ->
+	{string,_Line,Content} ->
 	    if length(Subs) == 0 ->
 		    {Subs,non_empty_list};
 	       length(Subs) /= length(Content) ->
@@ -570,7 +566,7 @@ process_subs(#pat_log{exp={fun_declaration,Loc,Rec},subs=Subs},_Eval,_Bindings) 
     {Subs,no_extras};
 process_subs(#pat_log{exp={wrapper,atom,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
     {Subs,no_extras};
-process_subs(#pat_log{subs=Subs}=S,EVal,Bindings) ->
+process_subs(#pat_log{subs=Subs}=_S,_EVal,_Bindings) ->
     %%io:format("Don't know how to process sub: ~p~nwith ~p under ~p~n", [revert(S#pat_log.exp),EVal,Bindings]),
     {Subs,no_extras}.
 

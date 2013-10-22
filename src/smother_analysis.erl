@@ -361,7 +361,7 @@ measure_coverage(#pat_log{exp=Exp,mcount=MCount,nmcount=NMCount,subs=Subs,extras
 measure_coverage({Name,MCount,NMCount},Context) ->
     %% Extras
     #analysis_report{
-		  exp=lists:flatten(io_lib:format("~p",[Name])),
+		  exp=atom_to_list(Name),
 		  context=Context,
 		  type=extra,
 		  matched=MCount,

@@ -5,6 +5,10 @@
 
 -include_lib("wrangler/include/wrangler.hrl").
 
+-export([reset2/1]).
+reset2(M) ->
+    reset(M).
+
 %% @doc Read the specified source file, insert instrumentation, and load the module.
 %% All subsequent smother API calls should refer to the module name, rather than the source file.
 compile(Filename) ->
@@ -159,9 +163,6 @@ rules(Module) ->
 	       Declare = {if_expr,VarList,Guards@@@},
 	       smother_server:declare(Module,Loc,Declare),
 	       ?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
-
-
-
 	   end
 	   ,api_refac:type(_This@)/=attribute),
      ?RULE(?T("case Expr@@ of Pats@@@ when Guards@@@ -> Body@@@ end"),
@@ -170,22 +171,23 @@ rules(Module) ->
 	       Loc = api_refac:start_end_loc(_This@),
 	       LocString = get_loc_string(_This@),
 	       %%ExprStx = hd(lists:flatten(wrangler_syntax:revert_forms(Expr@@))),
+
+	       %% Guard evaluation needs the maximal list of free variables so that guards for other lines
+	       %% can be evaluated
+	       VarList = api_refac:free_var_names(_This@),
+	       VarPairStringList = lists:map(fun(V) ->
+						     {atom_to_list(V),V}
+					     end,
+					     VarList),
+	       VarListString = re:replace(
+				 re:replace(
+				   lists:flatten(io_lib:format("~p", [VarPairStringList]))
+				   ,"'","",[{return,list},global]
+				  ),"\"","'",[{return,list},global]),
 	       
 	       {NewPats@@@,NewBody@@@} =lists:unzip( lists:map(
 			    fun({{P@@,G@@},B@@}) ->
 				    NewP@@ = [?TO_AST("P@@ = SMOTHER_CASE_PATTERN")],
-				    VarList = api_refac:free_var_names(G@@),
-
-				    VarPairStringList = lists:map(fun(V) ->
-									  {atom_to_list(V),V}
-							    end,
-							    VarList),
-
-				    VarListString = re:replace(
-						      re:replace(
-							lists:flatten(io_lib:format("~p", [VarPairStringList]))
-							,"'","",[{return,list},global]
-						       ),"\"","'",[{return,list},global]),
 				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_CASE_PATTERN | " ++ VarListString ++ "]), B@@ end")]}
 			    end,
 			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
