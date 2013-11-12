@@ -1,2 +1,2 @@
 #!/bin/bash
-pushd deps/wrangler && ./configure && popd
+pushd deps/wrangler && ./configure && make && popd
