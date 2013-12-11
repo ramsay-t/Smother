@@ -221,6 +221,8 @@ handle_cast(M,S) ->
 
 %% @private
 terminate(normal,_State) ->
+    ok;
+terminate(_,_State) ->
     ok.
 
 %% @private

@@ -77,13 +77,13 @@ analyse_to_html([],_OF,_Reports,{_FLocLine,_FLocChar} = _FLoc) ->
     ok;
 analyse_to_html(Chars,OF,Reports,{FLocLine,FLocChar} = FLoc) ->
     case hd(Chars) of
-	"\n" ->
+	$\n ->
 	    io:fwrite(OF,"\n",[]),
 	    analyse_to_html(tl(Chars),OF,Reports,{FLocLine+1,1});
-	"\t" ->
+	$\t ->
 	    io:fwrite(OF,"\t",[]),
 	    analyse_to_html(tl(Chars),OF,Reports,{FLocLine,FLocChar+8});
-	"~" ->
+	$~ ->
 	    io:fwrite(OF,"~~",[]),
 	    analyse_to_html(tl(Chars),OF,Reports,{FLocLine,FLocChar+1});
 	Data ->
@@ -94,7 +94,7 @@ analyse_to_html(Chars,OF,Reports,{FLocLine,FLocChar} = FLoc) ->
 			      io:fwrite(OF,"~s",[RHTML])
 		      end,
 		      Starts),
-	    io:fwrite(OF,Data,[]),
+	    io:fwrite(OF,[Data],[]),
 	    lists:map(fun(_R) ->
 			      io:fwrite(OF,"</span>",[])
 		      end,
