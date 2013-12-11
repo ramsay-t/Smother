@@ -19,6 +19,7 @@ compile(Filename) ->
 %% before analysing the source file. This will produce output based on the preprocssed source, which allows
 %% analysis of decisions containing macros etc.
 compile(Filename,Options) ->
+    wrangler_ast_server:start_ast_server(),
     {ok, ModInfo} = api_refac:get_module_info(Filename),
     {module,ModName} = lists:keyfind(module,1,ModInfo),
 
