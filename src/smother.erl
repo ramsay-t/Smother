@@ -209,7 +209,7 @@ rules(Module) ->
 
 	       {NewPats@@@,NewBody@@@} =lists:unzip( lists:map(
 			    fun({{P@@,G@@},B@@}) ->
-				    CP = next_fre_var_number(),
+				    CP = next_free_var_number(),
 				    NewP@@ = [?TO_AST("P@@ = SMOTHER_REC_PATTERN" ++ CP)],
 				    VarList = api_refac:free_var_names(G@@),
 
