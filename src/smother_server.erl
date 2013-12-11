@@ -355,7 +355,7 @@ get_pattern_subcomponents({wrapper,nil,_Attrs,_Image}) ->
     [];
 get_pattern_subcomponents({fun_declaration,_Loc,Args}) ->
     Args;
-get_pattern_subcomponents(V) ->
+get_pattern_subcomponents(_V) ->
     %%io:format("UNKNOWN pattern expression type:~n~p~n~n", [V]),
     [].
 
