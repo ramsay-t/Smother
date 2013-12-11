@@ -133,6 +133,25 @@ rename_underscores(A) ->
 	    A 
     end.
 
+%% @hidden
+get_useful_args(A) ->
+    case A of
+	{tree,match_expr,_Attrs,{match_expr, Left,Right}} ->
+	    case Left of
+		{wrapper,variable,VAttrs,Image} ->
+		    {wrapper,variable,VAttrs,Image};
+		_ ->
+		    case Right of
+			{wrapper,variable,VAttrs,Image} ->
+			    {wrapper,variable,VAttrs,Image};
+			_ ->
+			    A
+		    end	
+	    end;
+	_ ->
+	    A
+    end.
+
 %% @private
 %% @doc The mutation rules to insert instrumentation and "declare" the analysis point to the server.
 rules(Module) ->
@@ -146,10 +165,11 @@ rules(Module) ->
 	       FName = erl_parse:normalise(wrangler_syntax:revert(_W_f@)),
 	       reset_var_server(),
 	       NewArgs@@ = lists:map(fun rename_underscores/1, Args@@),
+	       OnlyUsefulArgs@@ = lists:map(fun get_useful_args/1, NewArgs@@),
 	       Declare = {fun_case,FName,length(Args@@),Args@@,Guard@@},
 	       smother_server:declare(Module,Loc,Declare),
 	       %%NewBody@@ = sub_instrument(Body@@,rules(Module)),
-	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[NewArgs@@]), Body@@;")
+	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[OnlyUsefulArgs@@]), Body@@;")
 	   end
 	   ,api_refac:type(_This@)/=attribute),
      ?RULE(?T("if Guards@@@ -> Body@@@ end"),
