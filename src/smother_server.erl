@@ -237,43 +237,43 @@ code_change(_OldVsn,State,_Extra) ->
 
 show_files() ->
     start_if_needed(),
-    gen_server:call({global,smother_server}, show_files).
+    gen_server:call({global,smother_server}, show_files, infinity).
 
 analyse(File) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{analyse,File}).
+    gen_server:call({global,smother_server},{analyse,File}, infinity).
 
 analyse(File,Loc) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{analyse,File,Loc}).
+    gen_server:call({global,smother_server},{analyse,File,Loc}, infinity).
 
 analyse_to_file(File,Outfile) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}).
+    gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}, infinity).
 analyse_to_file(File) ->
     start_if_needed(),
     Outfile = lists:flatten(io_lib:format("~s-SMOTHER.html",[File])),
-    gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}).
+    gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}, infinity).
     
 reset(File) ->    
     start_if_needed(),
-    gen_server:call({global,smother_server},{reset,File}).
+    gen_server:call({global,smother_server},{reset,File}, infinity).
 
 store_zero() ->
     start_if_needed(),
-    gen_server:call({global, smother_server}, store_zero).
+    gen_server:call({global, smother_server}, store_zero, infinity).
 
 declare(File,Loc,Declaration) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{declare,File,Loc,Declaration}).
+    gen_server:call({global,smother_server},{declare,File,Loc,Declaration}, infinity).
 
 log(File,Loc,ParamValues) ->
     start_if_needed(),
-    gen_server:cast({global,smother_server},{log,File,Loc,ParamValues}).
+    gen_server:cast({global,smother_server},{log,File,Loc,ParamValues}, infinity).
 
 clear(File) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{clear,File}).
+    gen_server:call({global,smother_server},{clear,File}, infinity).
     
 
 start_if_needed() ->
@@ -355,7 +355,7 @@ get_pattern_subcomponents({wrapper,nil,_Attrs,_Image}) ->
     [];
 get_pattern_subcomponents({fun_declaration,_Loc,Args}) ->
     Args;
-get_pattern_subcomponents(_V) ->
+get_pattern_subcomponents(V) ->
     %%io:format("UNKNOWN pattern expression type:~n~p~n~n", [V]),
     [].
 

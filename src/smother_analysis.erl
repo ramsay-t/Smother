@@ -86,6 +86,9 @@ analyse_to_html(IF,OF,Reports,{FLocLine,FLocChar} = FLoc) ->
 	{ok, "\t"} ->
 	    io:fwrite(OF,"\t",[]),
 	    analyse_to_html(IF,OF,Reports,{FLocLine,FLocChar+8});
+	{ok, "~"} ->
+	    io:fwrite(OF,"~~",[]),
+	    analyse_to_html(IF,OF,Reports,{FLocLine,FLocChar+1});
 	{ok, Data} ->
 	    %%io:format("~p: ~p~n",[FLoc,Data]),
 	    {Starts,Ends,NewReports} = get_relevant(Reports,FLoc),
