@@ -62,9 +62,9 @@ $(document).ready(function() {
                                        end 
                          end, 
                          get_reports(FDict)),
-    {ok,IF} = file:open(File,[read]),
-    ok = analyse_to_html(IF,OF,Reports,{1,1}),
-    file:close(IF),
+    {ok,Bin} = file:read_file(File),
+    Chars = binary_to_list(Bin), 
+    ok = analyse_to_html(Chars,OF,Reports,{1,1}),
     io:fwrite(OF,"
 </pre>
 
@@ -73,23 +73,20 @@ $(document).ready(function() {
 ",[]),
     ok.
 
-
-analyse_to_html(IF,OF,Reports,{FLocLine,FLocChar} = FLoc) ->
-    case file:read(IF,1) of
-	eof ->
-	    ok;
-	{error, Reason} ->
-	    {error, Reason};
-	{ok, "\n"} ->
+analyse_to_html([],_OF,_Reports,{_FLocLine,_FLocChar} = _FLoc) ->
+    ok;
+analyse_to_html(Chars,OF,Reports,{FLocLine,FLocChar} = FLoc) ->
+    case hd(Chars) of
+	"\n" ->
 	    io:fwrite(OF,"\n",[]),
-	    analyse_to_html(IF,OF,Reports,{FLocLine+1,1});
-	{ok, "\t"} ->
+	    analyse_to_html(tl(Chars),OF,Reports,{FLocLine+1,1});
+	"\t" ->
 	    io:fwrite(OF,"\t",[]),
-	    analyse_to_html(IF,OF,Reports,{FLocLine,FLocChar+8});
-	{ok, "~"} ->
+	    analyse_to_html(tl(Chars),OF,Reports,{FLocLine,FLocChar+8});
+	"~" ->
 	    io:fwrite(OF,"~~",[]),
-	    analyse_to_html(IF,OF,Reports,{FLocLine,FLocChar+1});
-	{ok, Data} ->
+	    analyse_to_html(tl(Chars),OF,Reports,{FLocLine,FLocChar+1});
+	Data ->
 	    %%io:format("~p: ~p~n",[FLoc,Data]),
 	    {Starts,Ends,NewReports} = get_relevant(Reports,FLoc),
 	    lists:map(fun(R) ->
@@ -102,9 +99,7 @@ analyse_to_html(IF,OF,Reports,{FLocLine,FLocChar} = FLoc) ->
 			      io:fwrite(OF,"</span>",[])
 		      end,
 		      Ends),
-	    analyse_to_html(IF,OF,NewReports,{FLocLine,FLocChar+1});
-	Err ->
-	    {error, Err}
+	    analyse_to_html(tl(Chars),OF,NewReports,{FLocLine,FLocChar+1})
 	end.
 
 get_relevant([],_FLoc) ->
