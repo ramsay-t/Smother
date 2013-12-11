@@ -271,7 +271,7 @@ declare(File,Loc,Declaration) ->
 
 log(File,Loc,ParamValues) ->
     start_if_needed(),
-    gen_server:cast({global,smother_server},{log,File,Loc,ParamValues}, infinity).
+    gen_server:cast({global,smother_server},{log,File,Loc,ParamValues}).
 
 clear(File) ->
     start_if_needed(),
