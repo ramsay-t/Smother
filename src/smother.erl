@@ -187,8 +187,9 @@ rules(Module) ->
 	       
 	       {NewPats@@@,NewBody@@@} =lists:unzip( lists:map(
 			    fun({{P@@,G@@},B@@}) ->
-				    NewP@@ = [?TO_AST("P@@ = SMOTHER_CASE_PATTERN")],
-				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_CASE_PATTERN | " ++ VarListString ++ "]), B@@ end")]}
+				    CP = next_free_var_number(),
+				    NewP@@ = [?TO_AST("P@@ = SMOTHER_CASE_PATTERN" ++ CP)],
+				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_CASE_PATTERN" ++ CP ++ " | " ++ VarListString ++ "]), B@@ end")]}
 			    end,
 			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
 			   )),
@@ -208,7 +209,8 @@ rules(Module) ->
 
 	       {NewPats@@@,NewBody@@@} =lists:unzip( lists:map(
 			    fun({{P@@,G@@},B@@}) ->
-				    NewP@@ = [?TO_AST("P@@ = SMOTHER_REC_PATTERN")],
+				    CP = next_fre_var_number(),
+				    NewP@@ = [?TO_AST("P@@ = SMOTHER_REC_PATTERN" ++ CP)],
 				    VarList = api_refac:free_var_names(G@@),
 
 				    VarPairStringList = lists:map(fun(V) ->
@@ -221,7 +223,7 @@ rules(Module) ->
 							lists:flatten(io_lib:format("~p", [VarPairStringList]))
 							,"'","",[{return,list},global]
 						       ),"\"","'",[{return,list},global]),
-				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_REC_PATTERN | " ++ VarListString ++ "]), B@@ end")]}
+				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_REC_PATTERN" ++ CP ++ " | " ++ VarListString ++ "]), B@@ end")]}
 			    end,
 			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
 			   )),
