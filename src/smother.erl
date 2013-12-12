@@ -24,7 +24,8 @@ compile(Filename,Options) ->
     {module,ModName} = lists:keyfind(module,1,ModInfo),
 
     wrangler_ast_server:start_ast_server(),
-    smother_server:clear(ModName),
+    smother_server:init_file(ModName,Filename),
+%%    smother_server:clear(ModName),
 
     Includes = [I || {i,I} <- Options],
     TrueFile = case lists:filter(fun(O) -> O == preprocess end, Options) of
