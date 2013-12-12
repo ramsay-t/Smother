@@ -389,31 +389,18 @@ all_vars([{wrapper,underscore,_Attrs,_Image} | Tl]) ->
 all_vars([_H | _]) ->
     false.
 
+build_pattern_record({wrapper,variable,_Attrs,_Image}=E) ->
+    %% Its not meaningful to consider sub components and non-matches of variables...
+    #pat_log{exp=E,nmcount=-1,subs=[],extras=[],matchedsubs=[]};
 build_pattern_record({[E],Gs}) ->
-    %%io:format("PairHIT:~p~n",[{E,G}]),
-    Comps = get_pattern_subcomponents(E),
-    Subs = case all_vars(Comps) of
-	       true -> [];
-	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
-	   end,
-    Extras = make_extras(E),
+    EPat = build_pattern_record(E),
     GuardPats = lists:map(fun(G) ->
 				  lists:map(fun build_bool_record/1, G)
 			  end,
 			  Gs),
-    #pat_log{exp=E,guards=GuardPats,subs=Subs,extras=Extras,matchedsubs=Subs};
+    EPat#pat_log{guards=GuardPats};
 build_pattern_record([E]) ->
-    %%io:format("No guards...?~n"),
-    %%io:format("HIT:~p~n",[E]),
-    Comps = get_pattern_subcomponents(E),
-    Subs = case all_vars(Comps) of
-	       true -> [];
-	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
-	   end,
-    Extras = make_extras(E),
-    #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs};
-build_pattern_record({wrapper,variable,_Attrs,_Image}=E) ->
-    #pat_log{exp=E,nmcount=-1,subs=[],extras=[],matchedsubs=[]};
+    build_pattern_record(E);
 build_pattern_record(E) ->
     %%io:format("No guards...?~n"),
     %%io:format("Single HIT:~p~n",[E]),
