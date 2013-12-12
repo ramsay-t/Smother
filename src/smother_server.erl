@@ -379,9 +379,23 @@ build_bool_record(E) ->
     Subs = lists:map(fun ?MODULE:build_bool_record/1,get_bool_subcomponents(E)),
     #bool_log{exp=E,tsubs=Subs,fsubs=Subs}.
 
+%% @private
+all_vars([]) ->
+    true;
+all_vars([{wrapper,variable,_Attrs,_Image}| Tl]) ->
+    all_vars(Tl);
+all_vars([{wrapper,underscore,_Attrs,_Image} | Tl]) ->
+    all_vars(Tl);
+all_vars([_H | _]) ->
+    false.
+
 build_pattern_record({[E],Gs}) ->
     %%io:format("PairHIT:~p~n",[{E,G}]),
-    Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
+    Comps = get_pattern_subcomponents(E),
+    Subs = case all_vars(Comps) of
+	       true -> [];
+	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
+	   end,
     Extras = make_extras(E),
     GuardPats = lists:map(fun(G) ->
 				  lists:map(fun build_bool_record/1, G)
@@ -391,7 +405,11 @@ build_pattern_record({[E],Gs}) ->
 build_pattern_record([E]) ->
     %%io:format("No guards...?~n"),
     %%io:format("HIT:~p~n",[E]),
-    Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
+    Comps = get_pattern_subcomponents(E),
+    Subs = case all_vars(Comps) of
+	       true -> [];
+	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
+	   end,
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs};
 build_pattern_record({wrapper,variable,_Attrs,_Image}=E) ->
@@ -399,7 +417,11 @@ build_pattern_record({wrapper,variable,_Attrs,_Image}=E) ->
 build_pattern_record(E) ->
     %%io:format("No guards...?~n"),
     %%io:format("Single HIT:~p~n",[E]),
-    Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
+    Comps = get_pattern_subcomponents(E),
+    Subs = case all_vars(Comps) of
+	       true -> [];
+	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
+	   end,
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs}.
 
