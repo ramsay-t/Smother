@@ -33,23 +33,42 @@ make_html_analysis(File,FDict,OF) ->
 .unsmothered {
   color:red;
 }
+
+#code {
+  width:70%;
+  float:left;
+}
+
+#info {
+  width:25%;
+  float:left;
+}
 </style>
 <script src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js\"></script>
 <script src=\"http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js\"></script>
 <script type=\"text/javascript\">
 function tipfun() {
-		 return $(this).prop('title');
+		 $('#info').html($(this).prop('title'));
+}
+function cleartip() {
+		 $('#info').html('');
 }
 
 $(document).ready(function() {
-  $('.smothered').tooltip({content: tipfun});
-  $('.partiallysmothered').tooltip({content: tipfun});
-  $('.unsmothered').tooltip({content: tipfun});
+  //$('.smothered').tooltip({content: tipfun});
+  //$('.partiallysmothered').tooltip({content: tipfun});
+  //$('.unsmothered').tooltip({content: tipfun});
+  $('.smothered').mouseover(tipfun);
+  $('.smothered').mouseout(cleartip);
+  $('.partiallysmothered').mouseover(tipfun);
+  $('.partiallysmothered').mouseout(cleartip);
+  $('.unsmothered').mouseover(tipfun);
+  $('.unsmothered').mouseout(cleartip);
 });
 </script>
 </head>
 <body>
-
+<div id=\"code\">
 <pre>
 ",[]),
 	
@@ -67,7 +86,9 @@ $(document).ready(function() {
     ok = analyse_to_html(Chars,OF,Reports,{1,1}),
     io:fwrite(OF,"
 </pre>
-
+</div><!-- code -->
+<div id=\"info\">
+</div>
 </body>
 </html>
 ",[]),
