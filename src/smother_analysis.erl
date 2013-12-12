@@ -35,39 +35,48 @@ make_html_analysis(File,FDict,OF) ->
 }
 
 #code {
-  width:70%;
-  float:left;
 }
 
 #info {
-  width:25%;
-  float:left;
+  position:fixed;
+  top:0;
+  width:295px;
+  padding:5px;
+  background-color:white;
 }
 </style>
 <script src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js\"></script>
 <script src=\"http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js\"></script>
 <script type=\"text/javascript\">
-function tipfun() {
-		 $('#info').html($(this).prop('title'));
+function tipfun(e) {
+       e.stopPropagation();
+       $('#info').html($(this).attr('analysis'));
 }
-function cleartip() {
-		 $('#info').html('');
+function cleartip(e) {
+       e.stopPropagation();
+       $('#info').html('');
+}
+
+function resize() {
+  $('#info').css('left',($(window).width()-300) + \"px\");
 }
 
 $(document).ready(function() {
-  //$('.smothered').tooltip({content: tipfun});
-  //$('.partiallysmothered').tooltip({content: tipfun});
-  //$('.unsmothered').tooltip({content: tipfun});
   $('.smothered').mouseover(tipfun);
   $('.smothered').mouseout(cleartip);
   $('.partiallysmothered').mouseover(tipfun);
   $('.partiallysmothered').mouseout(cleartip);
   $('.unsmothered').mouseover(tipfun);
   $('.unsmothered').mouseout(cleartip);
+  resize();
+  $( window ).resize(resize);
 });
 </script>
 </head>
 <body>
+<div id=\"container\">
+<div id=\"info\">
+</div><!-- info -->
 <div id=\"code\">
 <pre>
 ",[]),
@@ -87,8 +96,7 @@ $(document).ready(function() {
     io:fwrite(OF,"
 </pre>
 </div><!-- code -->
-<div id=\"info\">
-</div>
+</div><!-- container -->
 </body>
 </html>
 ",[]),
@@ -174,7 +182,7 @@ make_report_html(Coverage=#analysis_report{type=bool}) ->
 				       NonMatchMsg
 				      ])),
     DeQMsg = re:replace(Msg,"\"","\\&quot;",[{return,list},global]),
-    lists:flatten(io_lib:format("<span class=\"condition ~p\" title=\"~s\">",[Class,DeQMsg]));
+    lists:flatten(io_lib:format("<span class=\"condition ~p\" analysis=\"~s\">",[Class,DeQMsg]));
 make_report_html(Coverage=#analysis_report{type=pat}) ->
     %%io:format("Making messages for ~s~n",[Coverage#analysis_report.exp]),
 
@@ -209,7 +217,7 @@ make_report_html(Coverage=#analysis_report{type=pat}) ->
 				       ExtraMsg
 				      ])),
     DeQMsg = re:replace(Msg,"\"","\\&quot;",[{return,list},global]),
-    lists:flatten(io_lib:format("<span class=\"condition ~p\" title=\"~s\">",[Class,DeQMsg])).
+    lists:flatten(io_lib:format("<span class=\"condition ~p\" analysis=\"~s\">",[Class,DeQMsg])).
 
 determine_class(Coverage) ->
     if (Coverage#analysis_report.nonmatched == 0) and (Coverage#analysis_report.matched == 0) ->
