@@ -640,13 +640,17 @@ fix_lines({Y,_Line,Head,Tail}) ->
   {Y,0,fix_lines(Head),fix_lines(Tail)};
 fix_lines({Z,_Line}) ->
   {Z,0};
+fix_lines([]) ->
+    [];
+fix_lines([X |Xs]) ->
+    [fix_lines(X) | fix_lines(Xs)];
 fix_lines(E) ->
-  io:format("Can't fix lines in ~p~n",[E]),
+  %%io:format("Can't fix lines in ~p~n",[E]),
   E.
 
 revert(Exp) ->
-    fix_lines(fix_ints(wrangler_syntax:revert(Exp))).
-
+    R = wrangler_syntax:revert(Exp),
+    fix_lines(fix_ints(R)).
 
 apply_fun_log(_Loc,_LogData,[]) ->
     [];
