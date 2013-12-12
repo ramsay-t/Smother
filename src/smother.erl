@@ -160,9 +160,10 @@ rules(Module) ->
     [
      ?RULE(?T("f@(Args@@) when Guard@@ -> Body@@;"),
 	   begin
-	       %%io:format("FUN RULE HIT~n"),
 	       %%ArgNames = get_arg_names(Args@@),
 	       Loc = api_refac:start_end_loc(_This@),
+	       %%io:format("FUN RULE HIT ~p~n",[Loc]),
+	       put(smother_instrumented,[Loc | get(smother_instrumented)]),
 	       LocString = get_loc_string(_This@),
 	       FName = erl_parse:normalise(wrangler_syntax:revert(_W_f@)),
 	       reset_var_server(),
@@ -171,26 +172,31 @@ rules(Module) ->
 	       Declare = {fun_case,FName,length(Args@@),Args@@,Guard@@},
 	       smother_server:declare(Module,Loc,Declare),
 	       %%NewBody@@ = sub_instrument(Body@@,rules(Module)),
+	       %%io:format("f NewBody@@: ~p~n", [length(NewBody@@)]),
 	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[OnlyUsefulArgs@@]), Body@@;")
 	   end
-	   ,api_refac:type(_This@)/=attribute),
+	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented))),
      ?RULE(?T("if Guards@@@ -> Body@@@ end"),
 	   begin
-	       %%io:format("IF RULE HIT~n"),
 	       Loc = api_refac:start_end_loc(_This@),
+	       %%io:format("IF RULE HIT at ~p~n",[Loc]),
+	       put(smother_instrumented,[Loc | get(smother_instrumented)]),
 	       LocString = get_loc_string(_This@),
 	       %%GuardList@@@ = lists:flatten(lists:map(fun(G) -> io:format("G: ~p~n", [G]), wrangler_syntax:revert_forms(G) end, Guards@@@)),
 	       VarList = lists:flatten(lists:map(fun(G) -> api_refac:free_var_names(G) end, Guards@@@)),
 	       VarListString = re:replace(lists:flatten(io_lib:format("~p", [VarList])),"'","",[{return,list},global]),
 	       Declare = {if_expr,VarList,Guards@@@},
 	       smother_server:declare(Module,Loc,Declare),
+	       %%NewBody@@@ = lists:map(fun(B) -> sub_instrument(B,rules(Module)) end, Body@@@),
+	       %%io:format("If NewBody@@@: ~p~n",[length(NewBody@@@)]),
 	       ?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
 	   end
-	   ,api_refac:type(_This@)/=attribute),
+	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented))),
      ?RULE(?T("case Expr@@ of Pats@@@ when Guards@@@ -> Body@@@ end"),
 	   begin
-	       %%io:format("CASE RULE HIT~n"),
 	       Loc = api_refac:start_end_loc(_This@),
+	       %%io:format("CASE RULE HIT at ~p~n",[Loc]),
+	       put(smother_instrumented,[Loc | get(smother_instrumented)]),
 	       LocString = get_loc_string(_This@),
 	       %%ExprStx = hd(lists:flatten(wrangler_syntax:revert_forms(Expr@@))),
 
@@ -206,11 +212,12 @@ rules(Module) ->
 				   lists:flatten(io_lib:format("~p", [VarPairStringList]))
 				   ,"'","",[{return,list},global]
 				  ),"\"","'",[{return,list},global]),
-	       
+	       %%io:format("~s~n",[VarListString]),
 	       {NewPats@@@,NewBody@@@} =lists:unzip( lists:map(
 			    fun({{P@@,G@@},B@@}) ->
 				    CP = next_free_var_number(),
 				    NewP@@ = [?TO_AST("P@@ = SMOTHER_CASE_PATTERN" ++ CP)],
+				    %%NewB@@ = sub_instrument(B@@,rules(Module)),
 				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_CASE_PATTERN" ++ CP ++ " | " ++ VarListString ++ "]), B@@ end")]}
 			    end,
 			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
@@ -218,17 +225,17 @@ rules(Module) ->
 
 	       Declare = {case_expr,lists:zip(Pats@@@,Guards@@@)},
 	       smother_server:declare(Module,Loc,Declare),
-
+	       %%io:format("case NewBody@@@: ~p~n",[length(NewBody@@@)]),
 	       ?TO_AST("case Expr@@ of NewPats@@@ when Guards@@@ -> NewBody@@@ end")
 	   end
-	   ,api_refac:type(_This@)/=attribute),
+	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented))),
      ?RULE(?T("receive Pats@@@ when Guards@@@ -> Body@@@ end"),
 	   begin
-	       %%io:format("RECEIVE RULE HIT~n"),
 	       Loc = api_refac:start_end_loc(_This@),
+	       %%io:format("RECEIVE RULE HIT at ~p~n", [Loc]),
+	       put(smother_instrumented,[Loc | get(smother_instrumented)]),
 	       LocString = get_loc_string(_This@),
 	       
-
 	       {NewPats@@@,NewBody@@@} =lists:unzip( lists:map(
 			    fun({{P@@,G@@},B@@}) ->
 				    CP = next_free_var_number(),
@@ -245,6 +252,9 @@ rules(Module) ->
 							lists:flatten(io_lib:format("~p", [VarPairStringList]))
 							,"'","",[{return,list},global]
 						       ),"\"","'",[{return,list},global]),
+
+				    %%NewB@@ = sub_instrument(B@@,rules(Module)),
+
 				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_REC_PATTERN" ++ CP ++ " | " ++ VarListString ++ "]), B@@ end")]}
 			    end,
 			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
@@ -252,16 +262,17 @@ rules(Module) ->
 
 	       Declare = {receive_expr,lists:zip(Pats@@@,Guards@@@)},
 	       smother_server:declare(Module,Loc,Declare),
-
+	       %%io:format("Receive NewBody@@@: ~p~n",[length(NewBody@@@)]),
 	       ?TO_AST("receive NewPats@@@ when Guards@@@ -> NewBody@@@ end")
 	   end
-	   ,api_refac:type(_This@)/=attribute)
+	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)))
 
     ].
 	
 %% @private
 %% @doc Apply the instrumentation/analysis rules.
 instrument(MName,File) ->
+    put(smother_instrumented,[]),
     {ok, AST} = api_refac:get_ast(File),
     sub_instrument(AST,rules(MName)).
 
@@ -270,7 +281,7 @@ sub_instrument(AST,[]) ->
     AST;
 sub_instrument(AST,[R | MoreRules]) ->
     %%io:format("APPLYING ~p RULES TO ~p~n~n",[length(MoreRules)+1,?PP(AST)]),
-    {ok, AST2} = ?STOP_TD_TP([R],AST),
+    {ok, AST2} = ?FULL_TD_TP([R],AST),
     %%io:format("MADE ~p~n~n",[?PP(AST2)]),
     sub_instrument(AST2,MoreRules).
 
@@ -315,7 +326,7 @@ make_pp_file(Filename,Includes) ->
     Code = lists:flatten([erl_prettypr:format(C) ++ "\n" || C <- Cont]),
     
     FName = smother_annotater:get_tmp() ++ atom_to_list(ModName) ++ ".epp",
-    io:format("Making ~p~n",[FName]),
+    %%io:format("Making ~p~n",[FName]),
     file:write_file(FName,Code++"\n"),
     FName.
 
