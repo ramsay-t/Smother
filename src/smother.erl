@@ -11,6 +11,8 @@ reset2(M) ->
 
 %% @doc Read the specified source file, insert instrumentation, and load the module.
 %% All subsequent smother API calls should refer to the module name, rather than the source file.
+compile(Filename) when is_atom(Filename) ->
+	compile(atom_to_list(Filename) ++ ".erl");
 compile(Filename) ->
     compile(Filename,[]).
 
