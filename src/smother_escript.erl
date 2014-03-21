@@ -66,7 +66,8 @@ run_analysis(Modules, DestDir) ->
     [io:format("Error in analysis: ~p~n", [E]) || E <- Errors],
     ok = lists:foreach(fun(R) ->
                 ReportDest = filename:join([DestDir, R]),
-                ok = file:rename(R, ReportDest),
+                {ok, _} = file:copy(R, ReportDest),
+                ok = file:delete(R),
                 io:format("~p~n", [ReportDest])
         end, Reports).
 
