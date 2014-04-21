@@ -1,95 +1,59 @@
 -module(smother_analysis).
--export([make_html_analysis/3,get_range/1,get_zeros/1,get_nonzeros/1,get_percentage/1,get_reports/1,exp_printer/1]).
-
+-export([get_range/1,get_zeros/1,get_nonzeros/1,get_percentage/1,get_reports/1,exp_printer/1]).
+-export([json_reports/1,report_to_json/1,make_html_json_analysis/3]).
 -include_lib("wrangler/include/wrangler.hrl").
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
 
-make_html_analysis(File,FDict,OF) ->
-    io:fwrite(OF,"<html>
+make_html_json_analysis(File,FDict,Outfile) ->
+    OutPath = filename:dirname(Outfile),
+
+    %% Ok, this does assume that Smother was compiled from source and the source dir hasn't been moved...
+    ComDetails = apply(smother,module_info,[compile]),
+    {source,SmotherSource} = lists:keyfind(source,1,ComDetails),
+    SmotherPath = filename:dirname(SmotherSource),
+    SupportPath = SmotherPath ++ "/../reports/",
+    lists:map(fun(F) -> 
+		      file:copy(SupportPath ++ "/" ++ F,OutPath ++ "/" ++ F)
+	      end,
+	      ["smother.js","smother.css"]), 
+
+    Reports = get_reports(FDict),
+    case file:open(Outfile, [write]) of
+	{ok, OF} ->
+	    io:fwrite(OF,"<html>
 <head>
-<style>
-.ui-tooltip {
-	padding: 8px;
-	position: absolute;
-	z-index: 9999;
-	max-width: 300px;
-	-webkit-box-shadow: 0 0 5px #aaa;
-	box-shadow: 0 0 5px #aaa;
-        border-width:2px;
-        background-color: white;
-}
-.condition {
-  border-style: dashed;
-  border-width:1px;
-
-}
-.smothered {
-  color:green;
-}
-.partiallysmothered {
-  color:orange;
-}
-.unsmothered {
-  color:red;
-}
-
-#code {
-}
-
-#info {
-  position:fixed;
-  top:0;
-  width:295px;
-  padding:5px;
-  background-color:white;
-}
-</style>
 <script src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js\"></script>
 <script src=\"http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js\"></script>
+<link rel=\"stylesheet\" type=\"text/css\" href=\"smother.css\">
+<script src=\"smother.js\"></script>
 <script type=\"text/javascript\">
-function tipfun(e) {
-       e.stopPropagation();
-       $('#info').html($(this).attr('analysis'));
-}
-function cleartip(e) {
-       e.stopPropagation();
-       $('#info').html('');
-}
+reports = ",[]),
 
-function resize() {
-  $('#info').css('left',($(window).width()-300) + \"px\");
-}
+    JSON = json_reports(Reports),
+    io:fwrite(OF,JSON,[]),
 
-$(document).ready(function() {
-  $('.smothered').mouseover(tipfun);
-  $('.smothered').mouseout(cleartip);
-  $('.partiallysmothered').mouseover(tipfun);
-  $('.partiallysmothered').mouseout(cleartip);
-  $('.unsmothered').mouseover(tipfun);
-  $('.unsmothered').mouseout(cleartip);
-  resize();
-  $( window ).resize(resize);
-});
+    io:fwrite(OF,"
 </script>
 </head>
 <body>
 <div id=\"container\">
 <div id=\"info\">
+<h2 id=\"infoexp\"></h2>
+<div>
+<ul>
+<li>matched: <span id=\"infomatched\">0</span></li>
+<li>non-matched: <span id=\"infononmatched\">0</span></li>
+</ul>
+</div>
+<div id=\"infomatchedsubs\"></div>
+<div id=\"infononmatchedsubs\"></div>
+<div id=\"infocomment\"></div>
 </div><!-- info -->
 <div id=\"code\">
 <pre>
 ",[]),
-	
-    Reports = lists:sort(fun(#analysis_report{loc={{LSLine,LSChar},_}},
-                             #analysis_report{loc={{RSLine,RSChar},_}}) -> 
-                                       if LSLine == RSLine -> 
-                                                LSChar =< RSChar; 
-                                          true -> 
-                                                LSLine < RSLine 
-                                       end 
-                         end, 
-                         get_reports(FDict)),
+
     {ok,Bin} = file:read_file(File),
     Chars = binary_to_list(Bin), 
     ok = analyse_to_html(Chars,OF,Reports,{1,1}),
@@ -100,7 +64,11 @@ $(document).ready(function() {
 </body>
 </html>
 ",[]),
-    ok.
+		   file:close(OF),
+                   ok;
+		Error ->
+                  {error, Error}
+            end.
 
 analyse_to_html([],_OF,_Reports,{_FLocLine,_FLocChar} = _FLoc) ->
     ok;
@@ -118,9 +86,10 @@ analyse_to_html(Chars,OF,Reports,{FLocLine,FLocChar} = FLoc) ->
 	Data ->
 	    %%io:format("~p: ~p~n",[FLoc,Data]),
 	    {Starts,Ends,NewReports} = get_relevant(Reports,FLoc),
-	    lists:map(fun(R) ->
-			      RHTML = make_report_html(R),
-			      io:fwrite(OF,"~s",[RHTML])
+	    lists:map(fun(#analysis_report{loc=Loc}=R) ->
+			      %%RHTML = make_report_html(R),
+			      Class = determine_class(R),
+			      io:fwrite(OF,"<span class=\"condition ~p\" analysis=\"~p\">",[Class,Loc])
 		      end,
 		      Starts),
 	    io:fwrite(OF,[Data],[]),
@@ -148,76 +117,6 @@ get_relevant([#analysis_report{loc={Start,End}}=R | MoreReports],FLoc) ->
        true ->
 	    {SubStart,SubEnd,[R | SubNew]}
     end.
-
-make_report_html(Coverage=#analysis_report{type=bool}) ->
-    %% io:format("Making messages for ~s (~p,~p)~n",[Coverage#analysis_report.exp,length(Coverage#analysis_report.matchedsubs),length(Coverage#analysis_report.nonmatchedsubs)]),
-    Class = determine_class(Coverage),
-
-    MatchMsg = make_msg(
-		 "When true",
-		 Coverage#analysis_report.matched,
-		 Coverage#analysis_report.msubsproportion,
-		 Coverage#analysis_report.matchedsubs
-		),
-    NonMatchMsg = make_msg(
-		    "When false",
-		    Coverage#analysis_report.nonmatched,
-		    Coverage#analysis_report.nmsubsproportion,
-		    Coverage#analysis_report.nonmatchedsubs
-		   ),
-    
-    Msg = lists:flatten(io_lib:format("<h3>~s</h3>
-<ul>
-<li>Matched: ~s times</li>
-<li>Non-Matched: ~s times</li>
-</ul>
-~s
-~s
-",
-				      [
-				       exp_printer(Coverage#analysis_report.exp),
-				       colourise(Coverage#analysis_report.matched),
-				       colourise(Coverage#analysis_report.nonmatched),
-				       MatchMsg,
-				       NonMatchMsg
-				      ])),
-    DeQMsg = re:replace(Msg,"\"","\\&quot;",[{return,list},global]),
-    lists:flatten(io_lib:format("<span class=\"condition ~p\" analysis=\"~s\">",[Class,DeQMsg]));
-make_report_html(Coverage=#analysis_report{type=pat}) ->
-    %%io:format("Making messages for ~s~n",[Coverage#analysis_report.exp]),
-
-    Class = determine_class(Coverage),
-
-    ExtraMsg = make_msg(
-		 "Extras",
-		 Coverage#analysis_report.matched,
-		 Coverage#analysis_report.msubsproportion,
-		 Coverage#analysis_report.matchedsubs
-		),
-    NonMatchMsg = make_msg(
-		    "When non-matched",
-		    Coverage#analysis_report.nonmatched,
-		    Coverage#analysis_report.nmsubsproportion,
-		    Coverage#analysis_report.nonmatchedsubs
-		   ),
-
-    Msg = lists:flatten(io_lib:format("<h3>~s</h3>
-<ul>
-<li>Matched: ~s times</li>
-<li>Non-Matched: ~s times</li>
-</ul>
-~s
-~s
-",
-				      [
-				       exp_printer(Coverage#analysis_report.exp),
-				       colourise(Coverage#analysis_report.matched),
-				       colourise(Coverage#analysis_report.nonmatched),
-				       NonMatchMsg,
-				       ExtraMsg
-				      ])),
-    DeQMsg = re:replace(Msg,"\"","\\&quot;",[{return,list},global]),
-    lists:flatten(io_lib:format("<span class=\"condition ~p\" analysis=\"~s\">",[Class,DeQMsg])).
 
 determine_class(Coverage) ->
     if (Coverage#analysis_report.nonmatched == 0) and (Coverage#analysis_report.matched == 0) ->
@@ -248,48 +147,6 @@ determine_class(Coverage) ->
        true ->
 	    partiallysmothered
     end.
-
-make_msg(Status,Proportion,SubProportion,Reports) ->
-%%io:format("      Message for \"~s\": ~p ~p ~p ~n",[Status,Proportion,SubProportion,length(Reports)]),
-    Percentage = if Proportion == 0 -> 
-		 colourise(0); 
-	    Proportion < 0 -> 
-		 colourise(-1); 
-	    true -> 
-		 colourise(SubProportion,100) 
-	 end,
-    if length(Reports) > 0 ->
-	    MatchReports = lists:map(fun(#analysis_report{exp=Exp,matched=M,nonmatched=NM}) -> 
-					     EString = exp_printer(Exp),
-					     io_lib:format("<tr><td>~s</td><td>~s</td><td>~s</td></tr>",[EString,colourise(M),colourise(NM)]) 
-				     end,
-				     Reports),
-	    io_lib:format("<div>
-<strong>~s</strong>: ~s% sub-component coverage
-<table>
-<tr><th>&nbsp;</th><th>matched</th><th>non-matched</th></tr>
-~s
-</table>
-</div>", [Status,Percentage,MatchReports]);
-       true ->
-	    ""
-    end.
-
-colourise(N) ->
-    colourise(N,1).
-
-colourise(N,Scale) ->
-    lists:flatten(
-      if N == 0 ->
-	      io_lib:format("<font color=red>~p</font>",[N*Scale]);
-	 N < 0 ->
-	      io_lib:format("N/A",[]);
-	 N < 1 ->
-	      io_lib:format("<font color=blue>~p</font>",[N*Scale]);
-	 true ->
-	      io_lib:format("<font color=green>~p</font>",[N*Scale])
-      end
-     ).
 
 %% Measures coverage and returns a quad: {Match count, NonMatch count, Subs average matched, Subs average unmatched}
 measure_coverage(#bool_log{exp={wrapper,atom,_Attrs,{atom,_Loc,true}}=Exp,tcount=TCount},Context) ->
@@ -479,6 +336,7 @@ get_percentage(Analysis) ->
   end.
 
 get_reports(FDict) ->
+    %%io:format("~nGetting reports from ~p~n",[FDict]),
     get_reports(FDict,[]).
 
 get_reports([],_Context) ->
@@ -563,3 +421,68 @@ exp_printer(Exp) ->
 		    ?PP(Exp)
 	    end
     end.
+
+json_to_list([]) ->
+    [];
+json_to_list([Elem]) ->
+    [Elem];
+json_to_list([E | More]) ->
+    [E, 
+     lists:map(fun(R) ->
+		       case R of 
+			   [] -> "";
+			   _ ->
+			       "," ++ R
+		       end
+	       end,
+	       More)].
+
+json_reports(Reports) ->
+    JReports = lists:map(fun report_to_json/1, Reports),
+    Content = json_to_list(JReports),
+    binary:list_to_bin("[" ++ Content ++ "]").
+
+loc_to_json_compat({{SL,SC},{EL,EC}}) ->
+    [
+     {startline,SL}
+     ,{startchar,SC}
+     ,{endline,EL}
+     ,{endchar,EC}
+    ].
+
+report_to_json(Report=#analysis_report{}) ->
+    Fields = lists:zip(record_info(fields, analysis_report),
+		       lists:seq(2, record_info(size, analysis_report))),
+    Items = lists:map(fun({Name,I}) -> 
+			      Val = element(I,Report),
+			      case Name of
+				  exp ->
+				      {exp,binary:list_to_bin(exp_printer(Val))};
+				  context ->
+				      {context,binary:list_to_bin(io_lib:format("~p",[Val]))};
+				  loc ->
+				      {loc, loc_to_json_compat(Val)};
+				  matchedsubs ->
+				      {Name, []};
+				  nonmatchedsubs ->
+				      {Name, []};
+				  _ ->
+				      {Name,Val}
+			      end
+		      end, 
+		      Fields
+		     ),
+    JSON = jsx:term_to_json(Items),
+    MSubs = lists:map(fun(#analysis_report{loc=Loc}) -> 
+			      jsx:term_to_json(loc_to_json_compat(Loc))
+		      end, 
+		      Report#analysis_report.matchedsubs
+		     ),
+    NMSubs = lists:map(fun(#analysis_report{loc=Loc}) -> 
+			       jsx:term_to_json(loc_to_json_compat(Loc))
+		       end, 
+		       Report#analysis_report.nonmatchedsubs
+		      ),
+    J1 = re:replace(JSON,"\",matchedsubs\":\\[\\]","\",matchedsubs\":[" ++ json_to_list(MSubs) ++ "]",[{return,list}]),
+    re:replace(J1,"\"nonmatchedsubs\":\\[\\]","\"nonmatchedsubs\":[" ++ json_to_list(NMSubs) ++ "]",[{return,list}]).
+    

@@ -144,8 +144,7 @@ handle_call({declare,Module,Loc,Declaration},State) ->
 handle_call({analyse,Module},State) ->
     case lists:keyfind(Module,1,State) of
 	{Module,_Source,FDict} ->
-	    Analysis = FDict,
-	    {reply,{ok,Analysis},State};
+	    {reply,{ok,FDict},State};
 	_ ->
 	    {reply,{error,no_record_found,Module},State}
     end;
@@ -160,14 +159,12 @@ handle_call({analyse,Module,Loc},State) ->
 handle_call({analyse_to_file,Module,Outfile},State) ->
     case lists:keyfind(Module,1,State) of
 	{Module,Source,FDict} ->
-	    case file:open(Outfile, [write]) of
-		{ok, OF} ->
-		    Result = smother_analysis:make_html_analysis(Source,FDict,OF),
-		    file:close(OF),
-		    {reply,{Result,Outfile},State};
-		Error ->
-		    {reply,{error,Error},State}
-	    end;
+		    case smother_analysis:make_html_json_analysis(Source,FDict,Outfile) of 
+			ok ->
+			    {reply,{ok,Outfile},State};
+			{error, Error} ->
+			    {reply,{error,Error},State}
+		    end;
 	_ ->
 	    {reply,{error,no_record_found,Module},State}
     end;
@@ -254,7 +251,7 @@ show_files() ->
 
 analyse(File) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{analyse,File}, infinity).
+    gen_server:call({global,smother_server},{analyse,File}, 5000).
 
 analyse(File,Loc) ->
     start_if_needed(),

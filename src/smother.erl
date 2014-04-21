@@ -11,6 +11,11 @@ reset2(M) ->
 
 %% @doc Read the specified source file, insert instrumentation, and load the module.
 %% All subsequent smother API calls should refer to the module name, rather than the source file.
+compile(Module) when is_atom(Module) ->
+    ComDetails = apply(Module,module_info,[compile]),
+    {source,Source} = lists:keyfind(source,1,ComDetails),
+    {options,Options} = lists:keyfind(options,1,ComDetails),
+    compile(Source,Options);
 compile(Filename) ->
     compile(Filename,[]).
 
@@ -18,6 +23,11 @@ compile(Filename) ->
 %% Options inclue {i,Folder} to include folders, and the atom preprocess to run the preprocessor
 %% before analysing the source file. This will produce output based on the preprocssed source, which allows
 %% analysis of decisions containing macros etc.
+compile(Module, Options) when is_atom(Module) ->
+    ComDetails = apply(Module,module_info,[compile]),
+    {source,Source} = lists:keyfind(source,1,ComDetails),
+    {options,ComOptions} = lists:keyfind(options,1,ComDetails),
+    compile(Source,Options++ComOptions);
 compile(Filename,Options) ->
     wrangler_ast_server:start_ast_server(),
     {ok, ModInfo} = api_refac:get_module_info(Filename),
@@ -62,7 +72,6 @@ analyse(Module) ->
 
 %% @doc Access the analysis tree structure for a particular module.
 analyze(Module) ->
-    wait_for_logging_to_finish(),
     analyse(Module).
 
 %% @doc Produce an annotated HTML file showing MC/DC information.
@@ -72,7 +81,6 @@ analyse_to_file(Module) ->
 
 %% @doc Produce an annotated HTML file showing MC/DC information.
 analyze_to_file(Module) ->
-    wait_for_logging_to_finish(),
     analyse_to_file(Module).
 
 %% @doc Produce an annotated HTML file showing MC/DC information.
@@ -336,10 +344,13 @@ make_pp_file(Filename,Includes) ->
 %% and the analysis_report record itself contains context information. 
 get_reports(Module) ->
     wait_for_logging_to_finish(),
-    {ok,FDict} = analyse(Module),
-    smother_analysis:get_reports(FDict).
+    case analyse(Module) of
+	{ok,FDict} ->
+	    smother_analysis:get_reports(FDict);
+	{error,Reason} ->
+	    {error,Reason}
+    end.
 
-    
 mailbox_size() ->
     case global:whereis_name(smother_server) of
 	undefined ->
