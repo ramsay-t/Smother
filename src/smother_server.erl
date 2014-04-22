@@ -5,7 +5,7 @@
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
 
--export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1]).
+-export([log/3,declare/3,analyse/1,analyse/2,clear/1,analyse_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1,init_file/2]).
 -export([init/1,handle_call/2,handle_cast/2,terminate/2,handle_call/3,code_change/3,handle_info/2]).
 
 -export([build_pattern_record/1,build_bool_record/1,within_loc/2]).
@@ -21,24 +21,33 @@ handle_call(Action,_From,State) ->
     handle_call(Action,State).
 
 %% @private
+get_source(Module,State) ->
+    case lists:keyfind(Module,1,State) of
+	false -> "";
+	{Module, Source,_FD} -> Source
+    end.
+
+%% @private
 handle_call(show_files,State) ->
-    Files = lists:map(fun({File,FD}) -> File end, State),
+    Files = lists:map(fun({File,_Source,_FD}) -> File end, State),
     {reply,Files,State};
-handle_call({clear,File},State) ->
-    {reply,ok,lists:keystore(File,1,State,{File,[]})};
+handle_call({init_file,Module,Source},State) ->
+    {reply,ok,lists:keystore(Module,1,State,{Module,Source,[]})};
+handle_call({clear,Module},State) ->
+    {reply,ok,lists:keystore(Module,1,State,{Module,get_source(Module,State),[]})};
 handle_call({reset, Module}, State) ->
   OldDict = case get({zero_state, Module}) of
               X when is_list(X) -> X;
               _                 -> [] end,
-  {reply, ok, lists:keystore(Module, 1, State, {Module, OldDict})};
+  {reply, ok, lists:keystore(Module, 1, State, {Module, get_source(Module,State),OldDict})};
 handle_call(store_zero, State) ->
   [ put({zero_state, F}, S) || {F, S} <- State ],
   {reply, ok, State};
-handle_call({declare,File,Loc,Declaration},State) ->
+handle_call({declare,Module,Loc,Declaration},State) ->
     %%io:format("Declaration in ~p~n",[File]),
-    FDict = case lists:keyfind(File,1,State) of
-		false -> [];
-		{File, FD} -> FD
+    {FDict,Source} = case lists:keyfind(Module,1,State) of
+		false -> {[],get_source(Module,State)};
+		{Module, Src,FD} -> {FD,Src}
 	    end,
     FDict2 = 
 	case Declaration of
@@ -79,13 +88,16 @@ handle_call({declare,File,Loc,Declaration},State) ->
 		     ),
 		lists:keystore(Loc,1,FDict,{Loc,{if_expr,VarNames,ExpRecords}});
 	    {case_expr,Content} ->
-		ExpRecords = lists:map(fun({P,G}=C) ->
+		ExpRecords = lists:map(fun({_P,_G}=C) ->
 					     build_pattern_record(C)
 				     end,
 				     Content),
-		lists:keystore(Loc,1,FDict,{Loc,{case_expr,ExpRecords}});
+		%% Fix the last pattern to ignore fall through
+		%% FIXME: add config to require defensive code?
+		ExpRecords2 = ignore_fallthrough(ExpRecords),
+		lists:keystore(Loc,1,FDict,{Loc,{case_expr,ExpRecords2}});
 	    {receive_expr,Content} ->
-		Patterns = lists:map(fun({P,G}=C) ->
+		Patterns = lists:map(fun({_P,_G}=C) ->
 					     build_pattern_record(C)
 				     end,
 				     Content),
@@ -128,18 +140,17 @@ handle_call({declare,File,Loc,Declaration},State) ->
 		io:format("Unknown smother declaration: ~p~n",[Declaration]),
 		FDict
 	end,
-    {reply,ok,lists:keystore(File,1,State,{File,FDict2})};
+    {reply,ok,lists:keystore(Module,1,State,{Module,Source,FDict2})};
 handle_call({analyse,Module},State) ->
     case lists:keyfind(Module,1,State) of
-	{Module,FDict} ->
-	    Analysis = FDict,
-	    {reply,{ok,Analysis},State};
+	{Module,_Source,FDict} ->
+	    {reply,{ok,FDict},State};
 	_ ->
 	    {reply,{error,no_record_found,Module},State}
     end;
 handle_call({analyse,Module,Loc},State) ->
     case lists:keyfind(Module,1,State) of
-	{Module,FDict} ->
+	{Module,_Source,FDict} ->
 	    Analysis = lists:filter(fun({L,_V}) -> within_loc(Loc,L) end,FDict),
 	    {reply,{ok,Analysis},State};
 	_ ->
@@ -147,15 +158,13 @@ handle_call({analyse,Module,Loc},State) ->
     end;
 handle_call({analyse_to_file,Module,Outfile},State) ->
     case lists:keyfind(Module,1,State) of
-	{Module,FDict} ->
-	    case file:open(Outfile, [write]) of
-		{ok, OF} ->
-		    Result = smother_analysis:make_html_analysis(code:which(Module),FDict,OF),
-		    file:close(OF),
-		    {reply,{Result,Outfile},State};
-		Error ->
-		    {reply,{error,Error},State}
-	    end;
+	{Module,Source,FDict} ->
+		    case smother_analysis:make_html_json_analysis(Source,FDict,Outfile) of 
+			ok ->
+			    {reply,{ok,Outfile},State};
+			{error, Error} ->
+			    {reply,{error,Error},State}
+		    end;
 	_ ->
 	    {reply,{error,no_record_found,Module},State}
     end;
@@ -167,9 +176,9 @@ handle_call(Action,State) ->
 handle_cast(stop,S) ->
     {stop,normal,S};
 handle_cast({log,File,Loc,LogData},State) ->
-    FDict = case lists:keyfind(File,1,State) of
-		false -> [];
-		{File, FD} -> FD
+    {FDict,Source} = case lists:keyfind(File,1,State) of
+		false -> {[], get_source(File,State)};
+		{File, Src,FD} -> {FD,Src}
 	    end,
     if FDict == [] ->
 	    {noreply,State};
@@ -181,8 +190,8 @@ handle_cast({log,File,Loc,LogData},State) ->
 			[{ParentLoc, {fun_expr,F,Arity,Patterns}}] ->
 			    NewPatterns = apply_fun_log(Loc,LogData,Patterns),
 			    NewFDict = lists:keystore(ParentLoc,1,FDict,{ParentLoc,{fun_expr,F,Arity,NewPatterns}}),
-			    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
-			D ->
+			    {noreply,lists:keystore(File,1,State,{File,Source,NewFDict})};
+			_D ->
 			    io:format("No relevant condition for location ~p~n",[Loc]),
 			    lists:map(fun({L,_R}) -> 
 					      io:format("    ~p vs ~p <~p>~n",[L, Loc, L == Loc])
@@ -194,21 +203,21 @@ handle_cast({log,File,Loc,LogData},State) ->
 		    %%io:format("RECEIVED: ~p~n",[EVal]),
 		    NewPatterns = apply_pattern_log(EVal,Patterns,Bindings),
 		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{receive_expr,NewPatterns}}),
-		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};	
+		    {noreply,lists:keystore(File,1,State,{File,Source,NewFDict})};	
 		[{Loc,{if_expr,VarNames,ExRecords}}] ->
 		    Bindings = lists:zip(VarNames,LogData),
 		    ExRecords2 = apply_bool_log(Bindings,ExRecords,false),
 		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{if_expr,VarNames,ExRecords2}}),
-		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
+		    {noreply,lists:keystore(File,1,State,{File,Source,NewFDict})};
 		[{Loc,{case_expr,ExRecords}}]  ->
 		    [EVal | Bindings] = LogData,
 		    ExRecords2 = apply_pattern_log(EVal,ExRecords,Bindings),
 		    NewFDict = lists:keystore(Loc,1,FDict,{Loc,{case_expr,ExRecords2}}),
-		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
+		    {noreply,lists:keystore(File,1,State,{File,Source,NewFDict})};
 		[{ParentLoc, {fun_expr,F,Arity,Patterns}}] ->
 		    NewPatterns = apply_fun_log(Loc,LogData,Patterns),
 		    NewFDict = lists:keystore(ParentLoc,1,FDict,{ParentLoc,{fun_expr,F,Arity,NewPatterns}}),
-		    {noreply,lists:keystore(File,1,State,{File,NewFDict})};
+		    {noreply,lists:keystore(File,1,State,{File,Source,NewFDict})};
 		D ->
 		    io:format("Unknown declaration: ~p~n", [D]),
 		    {noreply,State}
@@ -220,6 +229,8 @@ handle_cast(M,S) ->
 
 %% @private
 terminate(normal,_State) ->
+    ok;
+terminate(_,_State) ->
     ok.
 
 %% @private
@@ -236,33 +247,35 @@ code_change(_OldVsn,State,_Extra) ->
 
 show_files() ->
     start_if_needed(),
-    gen_server:call({global,smother_server}, show_files).
+    gen_server:call({global,smother_server}, show_files, infinity).
 
 analyse(File) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{analyse,File}).
+    gen_server:call({global,smother_server},{analyse,File}, 5000).
 
 analyse(File,Loc) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{analyse,File,Loc}).
+    gen_server:call({global,smother_server},{analyse,File,Loc}, infinity).
 
 analyse_to_file(File,Outfile) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}).
+    gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}, infinity).
 analyse_to_file(File) ->
     start_if_needed(),
     Outfile = lists:flatten(io_lib:format("~s-SMOTHER.html",[File])),
-    gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}).
+    gen_server:call({global,smother_server},{analyse_to_file,File,Outfile}, infinity).
     
 reset(File) ->    
-   gen_server:call({global,smother_server},{reset,File}).
+    start_if_needed(),
+    gen_server:call({global,smother_server},{reset,File}, infinity).
 
 store_zero() ->
-   gen_server:call({global, smother_server}, store_zero).
+    start_if_needed(),
+    gen_server:call({global, smother_server}, store_zero, infinity).
 
 declare(File,Loc,Declaration) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{declare,File,Loc,Declaration}).
+    gen_server:call({global,smother_server},{declare,File,Loc,Declaration}, infinity).
 
 log(File,Loc,ParamValues) ->
     start_if_needed(),
@@ -270,7 +283,10 @@ log(File,Loc,ParamValues) ->
 
 clear(File) ->
     start_if_needed(),
-    gen_server:call({global,smother_server},{clear,File}).
+    gen_server:call({global,smother_server},{clear,File}, infinity).
+init_file(Module,Source) ->
+    start_if_needed(),
+    gen_server:call({global,smother_server},{init_file,Module,Source}, infinity).
     
 
 start_if_needed() ->
@@ -324,7 +340,7 @@ get_bool_subcomponents({tree,infix_expr,_Attrs,{infix_expr,Op,Left,Right}}) ->
 	false ->
 	    []
     end;
-get_bool_subcomponents([_V | _VMore] = VList) ->
+get_bool_subcomponents([_V | _VMore] = _VList) ->
     %%io:format("Got a list with ~p elements...~n", [length(VList)]),
     %% FIXME comma,semicolon syntax.....
     [];
@@ -332,7 +348,7 @@ get_bool_subcomponents({wrapper,atom,_Attrs,_Atom}) ->
     [];
 get_bool_subcomponents({atom,_Line,true}) ->
     [];
-get_bool_subcomponents(V) ->
+get_bool_subcomponents(_V) ->
     %%VList = tuple_to_list(V),
     %%io:format("Expression with ~p elements, starting with {~p,~p,... ",[length(VList),lists:nth(1,VList),lists:nth(2,VList)]),
     %%io:format("UNKNOWN bool expression type:~n~p~n~n", [V]),
@@ -352,7 +368,7 @@ get_pattern_subcomponents({wrapper,nil,_Attrs,_Image}) ->
     [];
 get_pattern_subcomponents({fun_declaration,_Loc,Args}) ->
     Args;
-get_pattern_subcomponents(V) ->
+get_pattern_subcomponents(_V) ->
     %%io:format("UNKNOWN pattern expression type:~n~p~n~n", [V]),
     [].
 
@@ -360,27 +376,36 @@ build_bool_record(E) ->
     Subs = lists:map(fun ?MODULE:build_bool_record/1,get_bool_subcomponents(E)),
     #bool_log{exp=E,tsubs=Subs,fsubs=Subs}.
 
+%% @private
+all_vars([]) ->
+    true;
+all_vars([{wrapper,variable,_Attrs,_Image}| Tl]) ->
+    all_vars(Tl);
+all_vars([{wrapper,underscore,_Attrs,_Image} | Tl]) ->
+    all_vars(Tl);
+all_vars([_H | _]) ->
+    false.
+
+build_pattern_record({wrapper,variable,_Attrs,_Image}=E) ->
+    %% Its not meaningful to consider sub components and non-matches of variables...
+    #pat_log{exp=E,nmcount=-1,subs=[],extras=[],matchedsubs=[]};
 build_pattern_record({[E],Gs}) ->
-    %%io:format("PairHIT:~p~n",[{E,G}]),
-    Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
-    Extras = make_extras(E),
+    EPat = build_pattern_record(E),
     GuardPats = lists:map(fun(G) ->
 				  lists:map(fun build_bool_record/1, G)
 			  end,
 			  Gs),
-    #pat_log{exp=E,guards=GuardPats,subs=Subs,extras=Extras,matchedsubs=Subs};
+    EPat#pat_log{guards=GuardPats};
 build_pattern_record([E]) ->
-    %%io:format("No guards...?~n"),
-    %%io:format("HIT:~p~n",[E]),
-    Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
-    Extras = make_extras(E),
-    #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs};
-build_pattern_record({wrapper,variable,_Attrs,_Image}=E) ->
-    #pat_log{exp=E,nmcount=-1,subs=[],extras=[],matchedsubs=[]};
+    build_pattern_record(E);
 build_pattern_record(E) ->
     %%io:format("No guards...?~n"),
     %%io:format("Single HIT:~p~n",[E]),
-    Subs = lists:map(fun ?MODULE:build_pattern_record/1,get_pattern_subcomponents(E)),
+    Comps = get_pattern_subcomponents(E),
+    Subs = case all_vars(Comps) of
+	       true -> [];
+	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
+	   end,
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs}.
 
@@ -411,11 +436,11 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 	%%io:format("Got back: ~p~n",[NewBindings]),
 
 	%% Now check for guard matches...
-	%%io:format("Pattern match, now need to match ~p guards under ~p...~n",[length(PatLog#pat_log.guards), NewBindings]),
 	{Result,NewGuards} = 
 	    try 
 		match_guards(Guards,Bindings++NewBindings)
-	    catch error:{unbound_var,_} ->
+	    catch error:{unbound_var,V} ->
+		    io:format("Error: unbound var ~p~n",[V]),
 		    {fail,Guards}
 	    end,
 
@@ -435,8 +460,8 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 		[NewPat | apply_pattern_log(EVal,Es,Bindings)]
 	end
     catch
-	error:Msg ->
-	    %%io:format("Non-Match!  ~p~n",[Msg]),
+	error:_Msg ->
+	    %%io:format("Non-Match!  ~p~n",[_Msg]),
 	    %%io:format("No Match: ~p vs ~p~n~p~n",[revert(PatLog#pat_log.exp),ValStx,Msg]),
 	    case process_subs(PatLog,EVal,Bindings) of
 		{NewSubs,Extra} ->
@@ -464,7 +489,6 @@ match_guards([],_Bindings) ->
 match_guards([#bool_log{}=G | Gs], Bindings) ->
     {SubRes, NewGs} = match_guards(Gs,Bindings),
     NewLog = hd(apply_bool_log(Bindings,[G],true)),
-    %% io:format("Tested ~p : ~p vs ~p~n",[?PP(NewLog#bool_log.exp),NewLog#bool_log.tcount,G#bool_log.tcount]),
     if NewLog#bool_log.tcount > G#bool_log.tcount ->
 	    %% Matched...
 	    {SubRes, [NewLog | NewGs]};
@@ -486,9 +510,7 @@ match_guards([Gs | MoreGs],Bindings) ->
 match_guards(G, _Bindings) ->
     io:format("Wait, what...? ~p~n",[G]).
 
-%%process_subs(_E,[],_Eval,_Bindings) ->
 process_subs(#pat_log{exp={tree,tuple,_Attrs,Content}=_Exp,subs=Subs},EVal,Bindings) ->
-    %%io:format("Trying to evaluate ~p~n with ~p under ~p~n",[Exp,EVal,Bindings]),
     case abstract_revert(EVal) of
 	{tuple,_OLine,ValContent} ->
 	    if length(Content) /= length(ValContent) ->
@@ -507,7 +529,6 @@ process_subs(#pat_log{exp={tree,tuple,_Attrs,Content}=_Exp,subs=Subs},EVal,Bindi
 		    {NewSubs, no_extras}
 	    end;
 	_Val ->
-	    %%io:format("~p is not a tuple...~n",[Val]),
 	    {Subs,not_a_tuple}
     end;
 process_subs(#pat_log{exp={wrapper,integer,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
@@ -540,7 +561,7 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content},subs=Subs},EVal,Bindings) 
 	       true ->
 		    {Subs, no_extras}
 	    end;
-	{string,Line,Content} ->
+	{string,_Line,Content} ->
 	    if length(Subs) == 0 ->
 		    {Subs,non_empty_list};
 	       length(Subs) /= length(Content) ->
@@ -567,7 +588,7 @@ process_subs(#pat_log{exp={fun_declaration,Loc,Rec},subs=Subs},_Eval,_Bindings) 
     {Subs,no_extras};
 process_subs(#pat_log{exp={wrapper,atom,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
     {Subs,no_extras};
-process_subs(#pat_log{subs=Subs}=S,EVal,Bindings) ->
+process_subs(#pat_log{subs=Subs}=_S,_EVal,_Bindings) ->
     %%io:format("Don't know how to process sub: ~p~nwith ~p under ~p~n", [revert(S#pat_log.exp),EVal,Bindings]),
     {Subs,no_extras}.
 
@@ -625,13 +646,17 @@ fix_lines({Y,_Line,Head,Tail}) ->
   {Y,0,fix_lines(Head),fix_lines(Tail)};
 fix_lines({Z,_Line}) ->
   {Z,0};
+fix_lines([]) ->
+    [];
+fix_lines([X |Xs]) ->
+    [fix_lines(X) | fix_lines(Xs)];
 fix_lines(E) ->
-  io:format("Can't fix lines in ~p~n",[E]),
+  %%io:format("Can't fix lines in ~p~n",[E]),
   E.
 
 revert(Exp) ->
-    fix_lines(fix_ints(wrangler_syntax:revert(Exp))).
-
+    R = wrangler_syntax:revert(Exp),
+    fix_lines(fix_ints(R)).
 
 apply_fun_log(_Loc,_LogData,[]) ->
     [];
@@ -707,3 +732,12 @@ get_percentage(File) ->
 	 {ok,Analysis} ->
 	     smother_analysis:get_percentage(Analysis)
     end.
+
+
+ignore_fallthrough([]) ->
+    [];
+ignore_fallthrough([Rec=#pat_log{} | []]) ->
+    NewRec = Rec#pat_log{nmcount=-1,subs=[],extras=[],matchedsubs=[]},
+    [NewRec];
+ignore_fallthrough([R | Rs]) ->
+    [R | ignore_fallthrough(Rs)].

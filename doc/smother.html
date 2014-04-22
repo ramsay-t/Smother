@@ -1,0 +1,123 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Module smother</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module smother</h1>
+<ul class="index"><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#analyse-1">analyse/1</a></td><td>Access the analysis tree structure for a particular module.</td></tr>
+<tr><td valign="top"><a href="#analyse_to_file-1">analyse_to_file/1</a></td><td>Produce an annotated HTML file showing MC/DC information.</td></tr>
+<tr><td valign="top"><a href="#analyse_to_file-2">analyse_to_file/2</a></td><td>Produce an annotated HTML file showing MC/DC information.</td></tr>
+<tr><td valign="top"><a href="#analyze-1">analyze/1</a></td><td>Access the analysis tree structure for a particular module.</td></tr>
+<tr><td valign="top"><a href="#analyze_to_file-1">analyze_to_file/1</a></td><td>Produce an annotated HTML file showing MC/DC information.</td></tr>
+<tr><td valign="top"><a href="#compile-1">compile/1</a></td><td>Read the specified source file, insert instrumentation, and load the module.</td></tr>
+<tr><td valign="top"><a href="#compile-2">compile/2</a></td><td>Read the specified source file, insert instrumentation, and load the module.</td></tr>
+<tr><td valign="top"><a href="#get_nonzeros-1">get_nonzeros/1</a></td><td>Produce a list of MC/DC tree leaves that have been covered.</td></tr>
+<tr><td valign="top"><a href="#get_percentage-1">get_percentage/1</a></td><td>Returns the percentage of coverage.</td></tr>
+<tr><td valign="top"><a href="#get_reports-1">get_reports/1</a></td><td>Produces readable analysis reports.</td></tr>
+<tr><td valign="top"><a href="#get_split-1">get_split/1</a></td><td>Show the counts of zeros and non-zeros.</td></tr>
+<tr><td valign="top"><a href="#get_zeros-1">get_zeros/1</a></td><td>Produce a list of MC/DC tree leaves that have not been covered.</td></tr>
+<tr><td valign="top"><a href="#reset-1">reset/1</a></td><td>Clears all analysis data for the specified module.</td></tr>
+<tr><td valign="top"><a href="#show_files-0">show_files/0</a></td><td>List all modules currently being instrumented.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="analyse-1">analyse/1</a></h3>
+<div class="spec">
+<p><tt>analyse(Module) -&gt; any()</tt></p>
+</div><p>Access the analysis tree structure for a particular module.</p>
+
+<h3 class="function"><a name="analyse_to_file-1">analyse_to_file/1</a></h3>
+<div class="spec">
+<p><tt>analyse_to_file(Module) -&gt; any()</tt></p>
+</div><p>Produce an annotated HTML file showing MC/DC information.</p>
+
+<h3 class="function"><a name="analyse_to_file-2">analyse_to_file/2</a></h3>
+<div class="spec">
+<p><tt>analyse_to_file(Module, OutFile) -&gt; any()</tt></p>
+</div><p>Produce an annotated HTML file showing MC/DC information.
+  OutFile specifies the output file name.</p>
+
+<h3 class="function"><a name="analyze-1">analyze/1</a></h3>
+<div class="spec">
+<p><tt>analyze(Module) -&gt; any()</tt></p>
+</div><p>Access the analysis tree structure for a particular module.</p>
+
+<h3 class="function"><a name="analyze_to_file-1">analyze_to_file/1</a></h3>
+<div class="spec">
+<p><tt>analyze_to_file(Module) -&gt; any()</tt></p>
+</div><p>Produce an annotated HTML file showing MC/DC information.</p>
+
+<h3 class="function"><a name="compile-1">compile/1</a></h3>
+<div class="spec">
+<p><tt>compile(Filename) -&gt; any()</tt></p>
+</div><p>Read the specified source file, insert instrumentation, and load the module.
+  All subsequent smother API calls should refer to the module name, rather than the source file.</p>
+
+<h3 class="function"><a name="compile-2">compile/2</a></h3>
+<div class="spec">
+<p><tt>compile(Filename, Options) -&gt; any()</tt></p>
+</div><p>Read the specified source file, insert instrumentation, and load the module.
+  Options inclue {i,Folder} to include folders, and the atom preprocess to run the preprocessor
+  before analysing the source file. This will produce output based on the preprocssed source, which allows
+  analysis of decisions containing macros etc.</p>
+
+<h3 class="function"><a name="get_nonzeros-1">get_nonzeros/1</a></h3>
+<div class="spec">
+<p><tt>get_nonzeros(Module) -&gt; any()</tt></p>
+</div><p>Produce a list of MC/DC tree leaves that have been covered.
+  This is the complement of get_zeros(Module).</p>
+
+<h3 class="function"><a name="get_percentage-1">get_percentage/1</a></h3>
+<div class="spec">
+<p><tt>get_percentage(Module) -&gt; any()</tt></p>
+</div><p>Returns the percentage of coverage.
+  Calculated as the size of the list returned by get_nonzeros, against the sum of that list
+  plus the list of zeros.</p>
+
+<h3 class="function"><a name="get_reports-1">get_reports/1</a></h3>
+<div class="spec">
+<p><tt>get_reports(Module) -&gt; any()</tt></p>
+</div><p>Produces readable analysis reports.
+  This returns a list of analysis_report records for each of the program analysis points.
+  analysis_report sub-components, such as matchedsubs, contain further analysis_report records
+  and the analysis_report record itself contains context information.</p>
+
+<h3 class="function"><a name="get_split-1">get_split/1</a></h3>
+<div class="spec">
+<p><tt>get_split(Module) -&gt; any()</tt></p>
+</div><p>Show the counts of zeros and non-zeros.
+  Produces a pair of integers, the first being the count of uncovered MC/DC tree leaves,
+  the second is the count of covered MC/DC leaves.
+  This gives a useful, quick measure of coverage in both percentage and absolute terms.</p>
+
+<h3 class="function"><a name="get_zeros-1">get_zeros/1</a></h3>
+<div class="spec">
+<p><tt>get_zeros(Module) -&gt; any()</tt></p>
+</div><p>Produce a list of MC/DC tree leaves that have not been covered.</p>
+
+<h3 class="function"><a name="reset-1">reset/1</a></h3>
+<div class="spec">
+<p><tt>reset(Module) -&gt; any()</tt></p>
+</div><p>Clears all analysis data for the specified module.</p>
+
+<h3 class="function"><a name="show_files-0">show_files/0</a></h3>
+<div class="spec">
+<p><tt>show_files() -&gt; any()</tt></p>
+</div><p>List all modules currently being instrumented.</p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Oct 10 2013, 10:05:23.</i></p>
+</body>
+</html>
