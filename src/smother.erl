@@ -288,7 +288,7 @@ instrument(MName,File) ->
 sub_instrument(AST,[]) ->
     AST;
 sub_instrument(AST,[R | MoreRules]) ->
-    %%io:format("APPLYING ~p RULES TO ~p~n~n",[length(MoreRules)+1,?PP(AST)]),
+    %%io:format("APPLYING ~p RULES~n",[length(MoreRules)+1]),
     {ok, AST2} = ?FULL_TD_TP([R],AST),
     %%io:format("MADE ~p~n~n",[?PP(AST2)]),
     sub_instrument(AST2,MoreRules).

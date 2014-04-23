@@ -472,14 +472,14 @@ report_to_json(Report=#analysis_report{}) ->
 		      end, 
 		      Fields
 		     ),
-    JSON = jsx:term_to_json(Items),
+    JSON = jsx:encode(Items),
     MSubs = lists:map(fun(#analysis_report{loc=Loc}) -> 
-			      jsx:term_to_json(loc_to_json_compat(Loc))
+			      jsx:encode(loc_to_json_compat(Loc))
 		      end, 
 		      Report#analysis_report.matchedsubs
 		     ),
     NMSubs = lists:map(fun(#analysis_report{loc=Loc}) -> 
-			       jsx:term_to_json(loc_to_json_compat(Loc))
+			       jsx:encode(loc_to_json_compat(Loc))
 		       end, 
 		       Report#analysis_report.nonmatchedsubs
 		      ),
