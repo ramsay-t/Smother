@@ -1,6 +1,7 @@
 -module(smother_analysis).
 -export([get_range/1,get_zeros/1,get_nonzeros/1,get_percentage/1,get_reports/1,exp_printer/1]).
 -export([json_reports/1,report_to_json/1,make_html_json_analysis/3]).
+-export([loc_sort/2]).
 -include_lib("wrangler/include/wrangler.hrl").
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
@@ -19,9 +20,6 @@ make_html_json_analysis(File,FDict,Outfile) ->
 	      ["smother.js","smother.css"]), 
 
     Reports = get_reports(FDict),
-    io:format("~p reports:~n~p~n~n",[length(Reports),
-				     lists:map(fun(#analysis_report{loc=Loc,exp=Exp}) -> {Loc,exp_printer(Exp)} end,lists:sort(fun loc_sort/2, Reports))
-				    ]),
     case file:open(Outfile, [write]) of
 	{ok, OF} ->
 	    io:fwrite(OF,"<html>
