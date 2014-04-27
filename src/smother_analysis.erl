@@ -19,6 +19,9 @@ make_html_json_analysis(File,FDict,Outfile) ->
 	      ["smother.js","smother.css"]), 
 
     Reports = get_reports(FDict),
+    io:format("~p reports:~n~p~n~n",[length(Reports),
+				     lists:map(fun(#analysis_report{loc=Loc,exp=Exp}) -> {Loc,exp_printer(Exp)} end,lists:sort(fun loc_sort/2, Reports))
+				    ]),
     case file:open(Outfile, [write]) of
 	{ok, OF} ->
 	    io:fwrite(OF,"<html>
@@ -473,16 +476,47 @@ report_to_json(Report=#analysis_report{}) ->
 		      Fields
 		     ),
     JSON = jsx:encode(Items),
-    MSubs = lists:map(fun(#analysis_report{loc=Loc}) -> 
-			      jsx:encode(loc_to_json_compat(Loc))
-		      end, 
-		      Report#analysis_report.matchedsubs
-		     ),
-    NMSubs = lists:map(fun(#analysis_report{loc=Loc}) -> 
-			       jsx:encode(loc_to_json_compat(Loc))
-		       end, 
-		       Report#analysis_report.nonmatchedsubs
-		      ),
+    MSubs = make_sub_reports(Report#analysis_report.matchedsubs),
+    NMSubs = make_sub_reports(Report#analysis_report.nonmatchedsubs),
     J1 = re:replace(JSON,"\",matchedsubs\":\\[\\]","\",matchedsubs\":[" ++ json_to_list(MSubs) ++ "]",[{return,list}]),
     re:replace(J1,"\"nonmatchedsubs\":\\[\\]","\"nonmatchedsubs\":[" ++ json_to_list(NMSubs) ++ "]",[{return,list}]).
     
+make_sub_reports([]) ->
+    [];
+make_sub_reports([#analysis_report{exp=Exp,matched=M,nonmatched=NM} | More]) ->
+    [ jsx:encode([{exp,binary:list_to_bin(exp_printer(Exp))},{matched,M},{nonmatched,NM}])
+     | make_sub_reports(More)].
+
+loc_sort(#analysis_report{loc=L1},L2) ->
+    loc_sort(L1,L2);
+loc_sort(L1,#analysis_report{loc=L2}) ->
+    loc_sort(L1,L2);
+loc_sort({{SL1,SC1},{EL1,EC1}}, {{SL2,SC2},{EL2,EC2}}) ->
+    if SL1 < SL2 ->
+            true;
+       SL1 > SL2 ->
+            false;
+       true ->
+            if SC1 < SC2 ->
+                    true;
+               SC1 > SC2 ->
+                    false;
+               true ->
+                    %% Equal start points
+                    %% Compare end positions
+                    if EL1 < EL2 ->
+                            true;
+                       EL1 > EL2 ->
+                            false;
+                       true ->
+                            if EC1 < EC2 ->
+                                    true;
+                               EC1 > EC2 ->
+                                    false;
+                               true ->
+                                    %% Equal.
+                                    true
+                            end
+                    end
+            end
+    end.

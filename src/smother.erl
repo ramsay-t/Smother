@@ -183,7 +183,7 @@ rules(Module) ->
 	       %%io:format("f NewBody@@: ~p~n", [length(NewBody@@)]),
 	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[OnlyUsefulArgs@@]), Body@@;")
 	   end
-	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented))),
+	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)) and not (api_refac:start_end_loc(_This@) == {{0,0},{0,0}})),
      ?RULE(?T("if Guards@@@ -> Body@@@ end"),
 	   begin
 	       Loc = api_refac:start_end_loc(_This@),
@@ -199,7 +199,7 @@ rules(Module) ->
 	       %%io:format("If NewBody@@@: ~p~n",[length(NewBody@@@)]),
 	       ?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
 	   end
-	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented))),
+	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)) and not (api_refac:start_end_loc(_This@) == {{0,0},{0,0}})),
      ?RULE(?T("case Expr@@ of Pats@@@ when Guards@@@ -> Body@@@ end"),
 	   begin
 	       Loc = api_refac:start_end_loc(_This@),
@@ -236,7 +236,7 @@ rules(Module) ->
 	       %%io:format("case NewBody@@@: ~p~n",[length(NewBody@@@)]),
 	       ?TO_AST("case Expr@@ of NewPats@@@ when Guards@@@ -> NewBody@@@ end")
 	   end
-	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented))),
+	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)) and not (api_refac:start_end_loc(_This@) == {{0,0},{0,0}})),
      ?RULE(?T("receive Pats@@@ when Guards@@@ -> Body@@@ end"),
 	   begin
 	       Loc = api_refac:start_end_loc(_This@),
@@ -273,7 +273,7 @@ rules(Module) ->
 	       %%io:format("Receive NewBody@@@: ~p~n",[length(NewBody@@@)]),
 	       ?TO_AST("receive NewPats@@@ when Guards@@@ -> NewBody@@@ end")
 	   end
-	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)))
+	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)) and not (api_refac:start_end_loc(_This@) == {{0,0},{0,0}}))
 
     ].
 	

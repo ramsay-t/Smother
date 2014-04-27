@@ -33,18 +33,14 @@ function numcolour(val) {
 function load_subs(elem,sublist) {
     elem.append("<table class=\"subtable\">");
     for(var i = 0; i < sublist.length; i++) {
-	r = find_report(loc_string(sublist[i]));
-	if(r == null) {
-	    alert("Could not find report for location " + loc_string(sublist[i]));
-	} else {
-	    elem.append("<tr><td>" 
-			+ r.exp 
-			+ "</td><td>" 
-			+ numcolour(r.matched)
-			+ "</td><td>" 
-			+ numcolour(r.nonmatched)
-			+ "</td></tr>");
-	}
+	r = sublist[i];
+	elem.append("<tr><td>" 
+		    + r.exp 
+		    + "</td><td>" 
+		    + numcolour(r.matched)
+		    + "</td><td>" 
+		    + numcolour(r.nonmatched)
+		    + "</td></tr>");
     } 
     elem.append("</table>");    
 }
