@@ -451,6 +451,9 @@ loc_to_json_compat({{SL,SC},{EL,EC}}) ->
      ,{endchar,EC}
     ].
 
+escape(String) ->
+     re:replace(String,"\"","\\\\\"",[global,{return,list}]).
+
 report_to_json(Report=#analysis_report{}) ->
     Fields = lists:zip(record_info(fields, analysis_report),
 		       lists:seq(2, record_info(size, analysis_report))),
@@ -482,7 +485,7 @@ report_to_json(Report=#analysis_report{}) ->
 make_sub_reports([]) ->
     [];
 make_sub_reports([#analysis_report{exp=Exp,matched=M,nonmatched=NM} | More]) ->
-    [ jsx:encode([{exp,binary:list_to_bin(exp_printer(Exp))},{matched,M},{nonmatched,NM}])
+    [ jsx:encode([{exp,binary:list_to_bin(escape(exp_printer(Exp)))},{matched,M},{nonmatched,NM}])
      | make_sub_reports(More)].
 
 loc_sort(#analysis_report{loc=L1},L2) ->

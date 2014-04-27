@@ -31,18 +31,20 @@ function numcolour(val) {
 }
 
 function load_subs(elem,sublist) {
-    elem.append("<table class=\"subtable\">");
+    var table = "";
+    table += "<table class=\"subtable\"><tr><td>&nbsp;</td><td>matched</td><td>non-matched</td></tr>";
     for(var i = 0; i < sublist.length; i++) {
 	r = sublist[i];
-	elem.append("<tr><td>" 
+	table += "<tr><td>" 
 		    + r.exp 
 		    + "</td><td>" 
 		    + numcolour(r.matched)
 		    + "</td><td>" 
 		    + numcolour(r.nonmatched)
-		    + "</td></tr>");
+		    + "</td></tr>";
     } 
-    elem.append("</table>");    
+    table += "</table>";
+    elem.append(table);
 }
 
 function load_report(report) {
