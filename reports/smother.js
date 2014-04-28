@@ -31,22 +31,20 @@ function numcolour(val) {
 }
 
 function load_subs(elem,sublist) {
-    elem.append("<table class=\"subtable\">");
+    var table = "";
+    table += "<table class=\"subtable\"><tr><td>&nbsp;</td><td>matched</td><td>non-matched</td></tr>";
     for(var i = 0; i < sublist.length; i++) {
-	r = find_report(loc_string(sublist[i]));
-	if(r == null) {
-	    alert("Could not find report for location " + loc_string(sublist[i]));
-	} else {
-	    elem.append("<tr><td>" 
-			+ r.exp 
-			+ "</td><td>" 
-			+ numcolour(r.matched)
-			+ "</td><td>" 
-			+ numcolour(r.nonmatched)
-			+ "</td></tr>");
-	}
+	r = sublist[i];
+	table += "<tr><td>" 
+		    + r.exp 
+		    + "</td><td>" 
+		    + numcolour(r.matched)
+		    + "</td><td>" 
+		    + numcolour(r.nonmatched)
+		    + "</td></tr>";
     } 
-    elem.append("</table>");    
+    table += "</table>";
+    elem.append(table);
 }
 
 function load_report(report) {

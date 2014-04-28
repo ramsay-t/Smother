@@ -1,6 +1,7 @@
 -module(smother_analysis).
 -export([get_range/1,get_zeros/1,get_nonzeros/1,get_percentage/1,get_reports/1,exp_printer/1]).
 -export([json_reports/1,report_to_json/1,make_html_json_analysis/3]).
+-export([loc_sort/2]).
 -include_lib("wrangler/include/wrangler.hrl").
 -include("include/eval_records.hrl").
 -include("include/analysis_reports.hrl").
@@ -450,6 +451,9 @@ loc_to_json_compat({{SL,SC},{EL,EC}}) ->
      ,{endchar,EC}
     ].
 
+escape(String) ->
+     re:replace(String,"\"","\\\\\"",[global,{return,list}]).
+
 report_to_json(Report=#analysis_report{}) ->
     Fields = lists:zip(record_info(fields, analysis_report),
 		       lists:seq(2, record_info(size, analysis_report))),
@@ -473,16 +477,47 @@ report_to_json(Report=#analysis_report{}) ->
 		      Fields
 		     ),
     JSON = jsx:encode(Items),
-    MSubs = lists:map(fun(#analysis_report{loc=Loc}) -> 
-			      jsx:encode(loc_to_json_compat(Loc))
-		      end, 
-		      Report#analysis_report.matchedsubs
-		     ),
-    NMSubs = lists:map(fun(#analysis_report{loc=Loc}) -> 
-			       jsx:encode(loc_to_json_compat(Loc))
-		       end, 
-		       Report#analysis_report.nonmatchedsubs
-		      ),
+    MSubs = make_sub_reports(Report#analysis_report.matchedsubs),
+    NMSubs = make_sub_reports(Report#analysis_report.nonmatchedsubs),
     J1 = re:replace(JSON,"\",matchedsubs\":\\[\\]","\",matchedsubs\":[" ++ json_to_list(MSubs) ++ "]",[{return,list}]),
     re:replace(J1,"\"nonmatchedsubs\":\\[\\]","\"nonmatchedsubs\":[" ++ json_to_list(NMSubs) ++ "]",[{return,list}]).
     
+make_sub_reports([]) ->
+    [];
+make_sub_reports([#analysis_report{exp=Exp,matched=M,nonmatched=NM} | More]) ->
+    [ jsx:encode([{exp,binary:list_to_bin(escape(exp_printer(Exp)))},{matched,M},{nonmatched,NM}])
+     | make_sub_reports(More)].
+
+loc_sort(#analysis_report{loc=L1},L2) ->
+    loc_sort(L1,L2);
+loc_sort(L1,#analysis_report{loc=L2}) ->
+    loc_sort(L1,L2);
+loc_sort({{SL1,SC1},{EL1,EC1}}, {{SL2,SC2},{EL2,EC2}}) ->
+    if SL1 < SL2 ->
+            true;
+       SL1 > SL2 ->
+            false;
+       true ->
+            if SC1 < SC2 ->
+                    true;
+               SC1 > SC2 ->
+                    false;
+               true ->
+                    %% Equal start points
+                    %% Compare end positions
+                    if EL1 < EL2 ->
+                            true;
+                       EL1 > EL2 ->
+                            false;
+                       true ->
+                            if EC1 < EC2 ->
+                                    true;
+                               EC1 > EC2 ->
+                                    false;
+                               true ->
+                                    %% Equal.
+                                    true
+                            end
+                    end
+            end
+    end.
