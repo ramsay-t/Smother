@@ -1,7 +1,10 @@
 -module(smother).
--export([compile/1,compile/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1,get_reports/1,mailbox_size/0,wait_for_logging_to_finish/0]).
+-export([compile/1,compile/2,compile_batch/2,analyse/1,analyze/1,analyse_to_file/1,analyze_to_file/1,analyse_to_file/2,analyse_to_file_batch/1,show_files/0,get_zeros/1,get_nonzeros/1,get_split/1,get_percentage/1,reset/1,get_reports/1,mailbox_size/0,wait_for_logging_to_finish/0]).
 
 -export([var_server/1]).
+
+%% Escript API
+-export([main/1]).
 
 -include_lib("wrangler/include/wrangler.hrl").
 
@@ -49,7 +52,7 @@ compile(Filename,Options) ->
     Code = wrangler_prettypr:print_ast('unix',AST2),
 
     TmpFile = smother_annotater:make_tmp_file(ModName,Code),
-    {ok,Forms} = epp:parse_file(TmpFile,Includes,[]),
+    {ok,Forms} = epp:parse_file(TmpFile,Includes,[{'TEST', true}]),
 
     smother_server:store_zero(),
 
@@ -59,6 +62,16 @@ compile(Filename,Options) ->
 	Error ->
 	    Error
     end.
+
+%% @doc Compiles several files, returning 2 lists: successes and errors
+compile_batch(Files, Options) ->
+    lists:foldl(fun (F, {Succ, Err}) ->
+                case compile(F, Options) of
+                    {module, M} -> {[M|Succ], Err};
+                    error -> {Succ, [{F, error}|Err]};
+                    {error, _E, _W}=E -> {Succ, [{F, E}|Err]}
+                end
+        end, {[], []}, Files).
 
 %% @doc List all modules currently being instrumented.
 show_files() ->
@@ -89,6 +102,15 @@ analyse_to_file(Module,OutFile) ->
     wait_for_logging_to_finish(),
     smother_server:analyse_to_file(Module,OutFile).
 
+%% @doc Runs analysis on several modules, returning 2 lists: successes and errors
+analyse_to_file_batch(Modules) ->
+    lists:foldl(fun (M, {Succ, Err}) ->
+                case analyse_to_file(M) of
+                    {ok, Report} -> {[Report|Succ], Err};
+                    {error, _}=E -> {Succ, [{M, E}|Err]}
+                end
+        end, {[], []}, Modules).
+
 %% @hidden
 start_var_server() ->
     case global:whereis_name(smother_free_var_server) of
@@ -105,7 +127,7 @@ next_free_var_number() ->
     VS = start_var_server(),
     VS ! {req, self()},
     receive
-	V -> 
+	V ->
 	    lists:flatten(io_lib:format("~p", [V]))
     end.
 
@@ -116,7 +138,7 @@ reset_var_server() ->
 
 %% @hidden
 var_server(N) ->
-    receive 
+    receive
 	{req, From} ->
 	    From ! N,
 	    var_server(N+1);
@@ -132,7 +154,7 @@ fix_range({Type,Thing,{attr,Loc,Attrs,End},Image},OldAttrs) ->
 
 %% @hidden
 rename_underscores(A) ->
-    case A of 
+    case A of
 	{wrapper,underscore,Attrs,_Image} ->
 	    fix_range(?TO_AST("SMOTHER_UNDERSCORE_" ++ next_free_var_number()), Attrs);
 	{tree,tuple,Attrs,Contents} ->
@@ -140,7 +162,7 @@ rename_underscores(A) ->
 	{tree,list,Attrs,{list,Contents,Tail}} ->
 	    {tree,list,Attrs,{list,lists:map(fun rename_underscores/1,Contents),rename_underscores(Tail)}};
 	_ ->
-	    A 
+	    A
     end.
 
 %% @hidden
@@ -156,7 +178,7 @@ get_useful_args(A) ->
 			    {wrapper,variable,VAttrs,Image};
 			_ ->
 			    A
-		    end	
+		    end
 	    end;
 	_ ->
 	    A
@@ -243,7 +265,7 @@ rules(Module) ->
 	       %%io:format("RECEIVE RULE HIT at ~p~n", [Loc]),
 	       put(smother_instrumented,[Loc | get(smother_instrumented)]),
 	       LocString = get_loc_string(_This@),
-	       
+
 	       {NewPats@@@,NewBody@@@} =lists:unzip( lists:map(
 			    fun({{P@@,G@@},B@@}) ->
 				    CP = next_free_var_number(),
@@ -276,7 +298,7 @@ rules(Module) ->
 	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)) and not (api_refac:start_end_loc(_This@) == {{0,0},{0,0}}))
 
     ].
-	
+
 %% @private
 %% @doc Apply the instrumentation/analysis rules.
 instrument(MName,File) ->
@@ -308,15 +330,15 @@ get_nonzeros(Module) ->
     wait_for_logging_to_finish(),
     smother_server:get_nonzeros(Module).
 %% @doc Show the counts of zeros and non-zeros.
-%% Produces a pair of integers, the first being the count of uncovered MC/DC tree leaves, 
-%% the second is the count of covered MC/DC leaves. 
+%% Produces a pair of integers, the first being the count of uncovered MC/DC tree leaves,
+%% the second is the count of covered MC/DC leaves.
 %% This gives a useful, quick measure of coverage in both percentage and absolute terms.
 get_split(Module) ->
     wait_for_logging_to_finish(),
     smother_server:get_split(Module).
 %% @doc Returns the percentage of coverage.
 %% Calculated as the size of the list returned by get_nonzeros, against the sum of that list
-%% plus the list of zeros. 
+%% plus the list of zeros.
 get_percentage(Module) ->
     wait_for_logging_to_finish(),
     smother_server:get_percentage(Module).
@@ -330,9 +352,9 @@ make_pp_file(Filename,Includes) ->
     {ok, ModInfo} = api_refac:get_module_info(Filename),
     {module,ModName} = lists:keyfind(module,1,ModInfo),
 
-    {ok, Cont} = epp:parse_file(Filename,Includes,[]),
+    {ok, Cont} = epp:parse_file(Filename,Includes,[{d, 'TEST'}]),
     Code = lists:flatten([erl_prettypr:format(C) ++ "\n" || C <- Cont]),
-    
+
     FName = smother_annotater:get_tmp() ++ atom_to_list(ModName) ++ ".epp",
     %%io:format("Making ~p~n",[FName]),
     file:write_file(FName,Code++"\n"),
@@ -341,7 +363,7 @@ make_pp_file(Filename,Includes) ->
 %% @doc Produces readable analysis reports.
 %% This returns a list of analysis_report records for each of the program analysis points.
 %% analysis_report sub-components, such as matchedsubs, contain further analysis_report records
-%% and the analysis_report record itself contains context information. 
+%% and the analysis_report record itself contains context information.
 get_reports(Module) ->
     wait_for_logging_to_finish(),
     case analyse(Module) of
@@ -369,7 +391,7 @@ wait_for_logging_to_finish() ->
 
 wait_for_logging({error,smother_not_started}) ->
     {error,smother_not_started};
-wait_for_logging(MBS) -> 
+wait_for_logging(MBS) ->
     if MBS =< 0 ->
 	    ok;
        MBS < 500 ->
@@ -381,4 +403,7 @@ wait_for_logging(MBS) ->
 	    wait_for_logging(mailbox_size())
     end.
 
-       
+%% @hidden
+main(Args) ->
+    smother_escript:main(Args).
+

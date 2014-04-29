@@ -18,6 +18,9 @@ clean:
 test:
 	./rebar skip_deps=true eunit
 
+escriptize: compile
+	./rebar escriptize
+
 .PHONY: test
 
 
