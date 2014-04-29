@@ -41,7 +41,7 @@ handle_call({reset, Module}, State) ->
               _                 -> [] end,
   {reply, ok, lists:keystore(Module, 1, State, {Module, get_source(Module,State),OldDict})};
 handle_call(store_zero, State) ->
-  [ put({zero_state, F}, S) || {F, S} <- State ],
+  [ put({zero_state, M}, S) || {M, _F, S} <- State ],
   {reply, ok, State};
 handle_call({declare,Module,Loc,Declaration},State) ->
     %%io:format("Declaration in ~p~n",[File]),
