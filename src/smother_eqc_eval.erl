@@ -20,7 +20,7 @@ compare(Module,EQC,Prop,NumTests) ->
     _Smother = smother:analyse(Module),
     smother:analyse_to_file(Module),
     SPerc = smother:get_percentage(Module),
-    io:format("[~p] ~p:~p() -> ~p~nSmother: ~.2f%~n",[timer:now_diff(SEnd,SStart),EQC,Prop,SRes,SPerc]),
+    io:format("[~.2f sec] ~p:~p() -> ~p~nSmother: ~.2f%~n",[timer:now_diff(SEnd,SStart)/1000000,EQC,Prop,SRes,SPerc]),
     
     io:format("Cover compiling ~p~n",[Source]),
     cover:compile(Source,Options),
@@ -32,9 +32,9 @@ compare(Module,EQC,Prop,NumTests) ->
     cover:analyse_to_file(Module,[html]),
     {ok, {Module,{Covered,TotalLines}}} = cover:analyse(Module,module),
     CPerc = (Covered * 100) / TotalLines,
-    io:format("[~p] ~p:~p() -> ~p~nCover: ~.2f%~n",[timer:now_diff(CEnd,CStart),EQC,Prop,CRes,CPerc]),
+    io:format("[~.2f sec] ~p:~p() -> ~p~nCover: ~.2f%~n",[timer:now_diff(CEnd,CStart)/1000000,EQC,Prop,CRes,CPerc]),
     
-    {CPerc,SPerc}.
+    {CPerc,SPerc,CRes,SRes}.
     %%{Cover,Smother}.
     %%ok.
 

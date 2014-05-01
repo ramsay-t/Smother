@@ -389,12 +389,12 @@ all_vars([_H | _]) ->
 build_pattern_record({wrapper,variable,_Attrs,_Image}=E) ->
     %% Its not meaningful to consider sub components and non-matches of variables...
     #pat_log{exp=E,nmcount=-1,subs=[],extras=[],matchedsubs=[]};
-build_pattern_record({[E],Gs}) ->
+build_pattern_record({E,Gs}) ->
     EPat = build_pattern_record(E),
-    GuardPats = lists:map(fun(G) ->
+    GuardPats = lists:flatten(lists:map(fun(G) ->
 				  lists:map(fun build_bool_record/1, G)
 			  end,
-			  Gs),
+			  Gs)),
     EPat#pat_log{guards=GuardPats};
 build_pattern_record([E]) ->
     build_pattern_record(E);
@@ -402,10 +402,13 @@ build_pattern_record(E) ->
     %%io:format("No guards...?~n"),
     %%io:format("Single HIT:~p~n",[E]),
     Comps = get_pattern_subcomponents(E),
-    Subs = case all_vars(Comps) of
-	       true -> [];
-	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
-	   end,
+    
+    %% Subs = case all_vars(Comps) of
+    %% 	       true -> [];
+    %% 	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
+    %% 	   end,
+    _WhoCares = all_vars(Comps),
+    Subs = lists:map(fun ?MODULE:build_pattern_record/1,Comps),
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs}.
 
@@ -579,8 +582,8 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content},subs=Subs},EVal,Bindings) 
 					   ),
 		    {NewSubs, no_extras}
 	    end;
-	Val ->
-	    io:format("~p is not a list...~n",[Val]),
+	_Val ->
+	    %%io:format("~p is not a list...~n",[Val]),
 	    {Subs,not_a_list}
     end;
 process_subs(#pat_log{exp={fun_declaration,Loc,Rec},subs=Subs},_Eval,_Bindings) ->

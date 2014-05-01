@@ -47,8 +47,8 @@ reports = ",[]),
 <li>non-matched: <span id=\"infononmatched\">0</span></li>
 </ul>
 </div>
-<div id=\"infomatchedsubs\"></div>
 <div id=\"infononmatchedsubs\"></div>
+<div id=\"infomatchedsubs\"></div>
 <div id=\"infocomment\"></div>
 </div><!-- info -->
 <div id=\"code\">
@@ -349,7 +349,16 @@ get_reports([{_Loc, {if_expr,_VarNames,ExpRecords}} | More],Context) ->
 get_reports([{_Loc, {receive_expr,Patterns}} | More],Context) ->
     get_reports(Patterns,Context) ++ get_reports(More,Context);
 get_reports([{_Loc, {fun_expr,_F,_Arity,Patterns}} | More],Context) ->
-    get_reports(Patterns,Context) ++ get_reports(More,Context);
+    %%io:format("Patterns<~p>: ~p~n",[length(Patterns),Patterns]),
+    %% Skip the main patterns, since they are the fake lists of arguments
+    Content = lists:foldl(
+		fun({_L, #pat_log{subs=Subs,matchedsubs=MatchedSubs,guards=Guards}},Acc) -> 
+			Acc ++ merge_evals(Subs,MatchedSubs) ++ Guards 
+		end, 
+		[],
+		Patterns),
+    %%lists:map(fun(#pat_log{exp=Exp}) -> io:format("~p~n",[exp_printer(Exp)]) end, Content),
+    get_reports(Content,Context) ++ get_reports(More,Context);
 get_reports([L = #bool_log{exp=Exp,tsubs=TSubs,fsubs=FSubs} | More],Context) ->
     LReport = measure_coverage(L,Context),
     Loc = get_range(Exp),
@@ -363,6 +372,8 @@ get_reports([L = #pat_log{exp=Exp,guards=Gs,subs=Subs,matchedsubs=MatchedSubs} |
     [ LReport#analysis_report{context=Context}
      | get_reports(MergedSubs,Context++[Loc]) ++ get_reports(lists:flatten(Gs),Context++[Loc]) ++ get_reports(More,Context)];
 get_reports([{_Loc,L=#pat_log{}} | More],Context) ->
+    get_reports([L | More],Context);
+get_reports([{_Loc,L=#bool_log{}} | More],Context) ->
     get_reports([L | More],Context);
 get_reports([E | More],Context) ->
     io:format("Unhandled report: ~p in context ~p~n",[E,Context]),
@@ -479,7 +490,7 @@ report_to_json(Report=#analysis_report{}) ->
     JSON = jsx:encode(Items),
     MSubs = make_sub_reports(Report#analysis_report.matchedsubs),
     NMSubs = make_sub_reports(Report#analysis_report.nonmatchedsubs),
-    J1 = re:replace(JSON,"\",matchedsubs\":\\[\\]","\",matchedsubs\":[" ++ json_to_list(MSubs) ++ "]",[{return,list}]),
+    J1 = re:replace(JSON,",\"matchedsubs\":\\[\\]",",\"matchedsubs\":[" ++ json_to_list(MSubs) ++ "]",[{return,list}]),
     re:replace(J1,"\"nonmatchedsubs\":\\[\\]","\"nonmatchedsubs\":[" ++ json_to_list(NMSubs) ++ "]",[{return,list}]).
     
 make_sub_reports([]) ->

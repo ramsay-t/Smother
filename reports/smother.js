@@ -53,15 +53,21 @@ function load_report(report) {
     $('#infononmatched').html(numcolour(report.nonmatched));
 
     $('#infomatchedsubs').empty();
-    if(report.matchedsubs.length > 0) {
-	$('#infomatchedsubs').append("<h2>When matched:</h2>");
-	load_subs($('#infomatchedsubs'),report.matchedsubs);
-    }
     $('#infononmatchedsubs').empty();
-    if(report.nonmatchedsubs.length > 0) {
-	$('#infononmatchedsubs').append("<h2>When non-matched:</h2>");
-	load_subs($('#infononmatchedsubs'),report.nonmatchedsubs);
-	
+    if(report.type=="pat") {
+	if((report.nonmatchedsubs.length > 0)||(report.matchedsubs.length > 0)) {
+    	    $('#infononmatchedsubs').append("<h2>When non-matched:</h2>");
+	    load_subs($('#infononmatchedsubs'),report.nonmatchedsubs.concat(report.matchedsubs));
+	}
+    } else {
+	if(report.nonmatchedsubs.length > 0) {
+	    $('#infononmatchedsubs').append("<h2>When false:</h2>");
+	    load_subs($('#infononmatchedsubs'),report.nonmatchedsubs);
+	} 
+	if(report.matchedsubs.length > 0) {
+		$('#infomatchedsubs').append("<h2>When True:</h2>");
+		load_subs($('#infomatchedsubs'),report.matchedsubs);
+	}
     }
 
     //$('#infocomment').html(JSON.stringify(report));
