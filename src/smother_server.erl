@@ -114,6 +114,12 @@ handle_call({declare,Module,Loc,Declaration},State) ->
 			    build_pattern_record({[list_from_list(Args)],Guard})
 		    end,
                 AR2 = ArgRecords#pat_log{extras=[]},
+		AR3 = case all_vars(lists:map(fun(#pat_log{exp=Exp}) -> Exp end, ArgRecords#pat_log.subs)) of
+			  true ->
+			      AR2#pat_log{nmcount=-1};
+			  _ ->
+			      AR2
+		      end,
 		%%Find function declaration and add a pattern...
 		{OldLoc, {fun_expr,F,Arity,Patterns}} = 
 		    case lists:filter(fun({_Loc,Rec}) ->
@@ -130,7 +136,7 @@ handle_call({declare,Module,Loc,Declaration},State) ->
 			[] ->
 			    {Loc,{fun_expr,F,Arity,[]}}
 		    end,
-		NewFRecord = {fun_expr,F,Arity,Patterns ++ [{Loc,AR2}]},
+		NewFRecord = {fun_expr,F,Arity,Patterns ++ [{Loc,AR3}]},
 		%% This assumes declarations will arrive in order...
 		{Start,_End} = OldLoc,
 		{_NewStart,NewEnd} = Loc,
@@ -403,15 +409,14 @@ build_pattern_record(E) ->
     %%io:format("Single HIT:~p~n",[E]),
     Comps = get_pattern_subcomponents(E),
     
-    %% Subs = case all_vars(Comps) of
-    %% 	       true -> [];
-    %% 	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
-    %% 	   end,
-    _WhoCares = all_vars(Comps),
-    Subs = lists:map(fun ?MODULE:build_pattern_record/1,Comps),
+    Subs = case all_vars(Comps) of
+    	       true -> [];
+    	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
+    	   end,
+    %%_WhoCares = all_vars(Comps),
+    %%Subs = lists:map(fun ?MODULE:build_pattern_record/1,Comps),
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs}.
-
 
 add_match([]) ->
     [];

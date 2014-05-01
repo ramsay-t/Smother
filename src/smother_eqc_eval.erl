@@ -8,8 +8,11 @@ compare(Module,EQC,Prop,NumTests) ->
     {source,Source} = lists:keyfind(source,1,ComDetails),
     {options,Options} = lists:keyfind(options,1,ComDetails),
 
+    GStart = now(),
     Tests = eqc_suite:random(eqc:numtests(NumTests,apply(EQC,Prop,[]))),
     eqc_suite:write(Module,Tests),
+    GEnd = now(),
+    io:format("Generated ~p tests in ~.2f sec.~n",[NumTests,timer:now_diff(GEnd,GStart)/1000000]),
 
     io:format("Smother compiling ~p~n",[Source]),
     smother:compile(Source,Options),

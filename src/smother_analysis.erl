@@ -351,14 +351,15 @@ get_reports([{_Loc, {receive_expr,Patterns}} | More],Context) ->
 get_reports([{_Loc, {fun_expr,_F,_Arity,Patterns}} | More],Context) ->
     %%io:format("Patterns<~p>: ~p~n",[length(Patterns),Patterns]),
     %% Skip the main patterns, since they are the fake lists of arguments
-    Content = lists:foldl(
-		fun({_L, #pat_log{subs=Subs,matchedsubs=MatchedSubs,guards=Guards}},Acc) -> 
-			Acc ++ merge_evals(Subs,MatchedSubs) ++ Guards 
-		end, 
-		[],
-		Patterns),
+    %% Content = lists:foldl(
+    %% 		fun({_L, #pat_log{subs=Subs,matchedsubs=MatchedSubs,guards=Guards}},Acc) -> 
+    %% 			Acc ++ merge_evals(Subs,MatchedSubs) ++ Guards 
+    %% 		end, 
+    %% 		[],
+    %% 		Patterns),
     %%lists:map(fun(#pat_log{exp=Exp}) -> io:format("~p~n",[exp_printer(Exp)]) end, Content),
-    get_reports(Content,Context) ++ get_reports(More,Context);
+    %%get_reports(Content,Context) ++ get_reports(More,Context);
+    get_reports(Patterns,Context) ++ get_reports(More,Context);
 get_reports([L = #bool_log{exp=Exp,tsubs=TSubs,fsubs=FSubs} | More],Context) ->
     LReport = measure_coverage(L,Context),
     Loc = get_range(Exp),
