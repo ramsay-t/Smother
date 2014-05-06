@@ -546,16 +546,15 @@ process_subs(#pat_log{exp={wrapper,integer,_Attrs,_Image},subs=Subs},_EVal,_Bind
 process_subs(#pat_log{exp={wrapper,nil,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
     {Subs,no_extras};
 process_subs(#pat_log{exp={tree,list,_Attrs,_Content}=Exp,subs=Subs},EVal,Bindings) ->
+    %% Get the true length, rather than the number of Subs, since some of those have been stripped
+    L = length(get_pattern_subcomponents(Exp)),
     case abstract_revert(EVal) of
 	{cons,_OLine,Head,ValContent} ->
 	    ContentList = [Head | list_to_list(ValContent)],
-	    %% This is necessary because the pattern builder strips some subs if the are variables etc.
-	    Comps = get_pattern_subcomponents(Exp),
-	    SLen = length(Comps),
-	    if SLen == 0 ->
+	    if L == 0 ->
 		    io:format("~p is empty~n",[smother_analysis:exp_printer(Exp)]),
 		    {Subs,non_empty_list};
-	       SLen /= length(ContentList) ->
+	       L /= length(ContentList) ->
 		    {Subs,list_size_mismatch};
 	       true ->
 		    ZipList = lists:zip(Subs,ContentList),
@@ -570,15 +569,15 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content}=Exp,subs=Subs},EVal,Bindin
 		    {NewSubs, no_extras}
 	       end;
 	{nil,_OLine} ->
-	    if length(Subs) /= 0 ->
+	    if L /= 0 ->
 		    {Subs, empty_list};
 	       true ->
 		    {Subs, no_extras}
 	    end;
 	{string,_Line,Content} ->
-	    if length(Subs) == 0 ->
+	    if L == 0 ->
 		    {Subs,non_empty_list};
-	       length(Subs) /= length(Content) ->
+	       L /= length(Content) ->
 		    {Subs,list_size_mismatch};
 	       true ->
 		    ZipList = lists:zip(Subs,Content),
@@ -594,7 +593,7 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content}=Exp,subs=Subs},EVal,Bindin
 		    {NewSubs, no_extras}
 	    end;
 	_Val ->
-	    %%io:format("~p is not a list...~n",[Val]),
+	    io:format("~p is not a list...~n",[_Val]),
 	    {Subs,not_a_list}
     end;
 process_subs(#pat_log{exp={fun_declaration,Loc,Rec},subs=Subs},_Eval,_Bindings) ->
