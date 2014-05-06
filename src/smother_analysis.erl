@@ -348,7 +348,7 @@ get_reports([{_Loc, {if_expr,_VarNames,ExpRecords}} | More],Context) ->
     get_reports(ExpRecords,Context) ++ get_reports(More,Context);
 get_reports([{_Loc, {receive_expr,Patterns}} | More],Context) ->
     get_reports(Patterns,Context) ++ get_reports(More,Context);
-get_reports([{_Loc, {fun_expr,_F,_Arity,Patterns}} | More],Context) ->
+get_reports([{_Loc, {fun_expr,_F,Arity,Patterns}} | More],Context) ->
     %%io:format("Patterns<~p>: ~p~n",[length(Patterns),Patterns]),
     %% Skip the main patterns, since they are the fake lists of arguments
     %% Content = lists:foldl(
@@ -359,7 +359,24 @@ get_reports([{_Loc, {fun_expr,_F,_Arity,Patterns}} | More],Context) ->
     %% 		Patterns),
     %%lists:map(fun(#pat_log{exp=Exp}) -> io:format("~p~n",[exp_printer(Exp)]) end, Content),
     %%get_reports(Content,Context) ++ get_reports(More,Context);
-    get_reports(Patterns,Context) ++ get_reports(More,Context);
+    if Arity == 1 ->
+	    %% The list of args is meaningless for arity 1 functions, but we need to capture the guards,
+	    %% unless its all vars, in which case there is no content...
+	    Content = lists:foldl(
+			fun({_L, #pat_log{exp=Exp,subs=Subs,matchedsubs=MatchedSubs,guards=Guards}}=P,Acc) -> 
+				case smother_server:all_vars(smother_server:get_pattern_subcomponents(Exp)) of
+				    true ->
+					Acc ++ [P];
+				    _ ->
+					Acc ++ merge_evals(Subs,MatchedSubs) ++ Guards 
+				end
+			end, 
+			[],
+			Patterns),
+	    get_reports(Content,Context) ++ get_reports(More,Context);
+       true ->
+	    get_reports(Patterns,Context) ++ get_reports(More,Context)
+    end;
 get_reports([L = #bool_log{exp=Exp,tsubs=TSubs,fsubs=FSubs} | More],Context) ->
     LReport = measure_coverage(L,Context),
     Loc = get_range(Exp),

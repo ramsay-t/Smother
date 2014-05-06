@@ -12,6 +12,8 @@
 
 -export([store_zero/0]).
 
+-export([all_vars/1,get_pattern_subcomponents/1]).
+
 %% @private
 init(Dict) ->
     {ok,Dict}.
@@ -482,7 +484,7 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 				    {Extra,EMCount,ENMCount} ->
 					lists:keyreplace(Extra,1,Extras,{Extra,EMCount+1,ENMCount});
 				    _ ->
-					io:format("Unknown extra result: ~p~n",[Extra]),
+					io:format("Unknown extra result: ~p in ~p~n",[Extra,smother_analysis:exp_printer(Exp)]),
 					unuse_extras(Extras)
 				end
 			end,
@@ -551,6 +553,7 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content}=Exp,subs=Subs},EVal,Bindin
 	    Comps = get_pattern_subcomponents(Exp),
 	    SLen = length(Comps),
 	    if SLen == 0 ->
+		    io:format("~p is empty~n",[smother_analysis:exp_printer(Exp)]),
 		    {Subs,non_empty_list};
 	       SLen /= length(ContentList) ->
 		    {Subs,list_size_mismatch};
