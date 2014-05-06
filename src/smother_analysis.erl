@@ -243,14 +243,14 @@ measure_coverage(#pat_log{exp=Exp,mcount=MCount,nmcount=NMCount,subs=Subs,extras
 		      nmsubsproportion=coverage_average(NMSubs),
 		      msubsproportion=coverage_average(ESubs)
 		    };
-measure_coverage({Name,MCount,NMCount},Context) ->
+measure_coverage({Name,MCount},Context) ->
     %% Extras
     #analysis_report{
 		  exp=atom_to_list(Name),
 		  context=Context,
 		  type=extra,
 		  matched=MCount,
-		  nonmatched=NMCount
+		  nonmatched=-1
 		 };
 measure_coverage(Unk,Context) ->
     io:format("Unhandled coverage measure: ~p [Context:~p]~n", [Unk,Context]),
@@ -428,12 +428,12 @@ merge_evals([#pat_log{exp=LExp,guards=LGS,mcount=LMC,nmcount=LNMC,subs=LS,extras
 	       }
 	     | merge_evals(LMore,RMore)]
     end;
-merge_evals([{LEName,LMC,LNMC} | LMore],[{REName,RMC,RNMC} | RMore]) ->
+merge_evals([{LEName,LMC} | LMore],[{REName,RMC} | RMore]) ->
     %% Extras
     if not (LEName == REName) ->
 	    exit({"Merging miss-matched extras",LEName,REName});
        true ->
-	    [{LEName,LMC+RMC,LNMC+RNMC}
+	    [{LEName,LMC+RMC}
 	     | merge_evals(LMore,RMore)]
     end;
 merge_evals(A,B) ->    

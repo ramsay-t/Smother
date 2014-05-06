@@ -428,11 +428,6 @@ add_match([S | Ss]) ->
 	matchedsubs=add_match(S#pat_log.matchedsubs)
        } | add_match(Ss)].
 
-unuse_extras([]) ->
-  [];
-unuse_extras([{E,M,NM} | Es]) ->
-  [{E,M,NM+1} | unuse_extras(Es)].
-
 apply_pattern_log(_EVal,[],_Bindings) ->
     [];
 apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | Es],Bindings) ->
@@ -458,7 +453,7 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 		   mcount=PatLog#pat_log.mcount+1,
 		   matchedsubs=add_match(PatLog#pat_log.matchedsubs),
 		   guards=NewGuards,
-                   extras=unuse_extras(Extras)
+                   extras=Extras
 		  },
 
 	%%io:format("Pattern MATCH, Guards: ~p~n",[Result]),
@@ -478,14 +473,14 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
 		    NewExtras = 
 			case Extra of
 			    no_extras ->
-				unuse_extras(Extras);
+				Extras;
 			    _ ->
 				case lists:keyfind(Extra,1,Extras) of
-				    {Extra,EMCount,ENMCount} ->
-					lists:keyreplace(Extra,1,Extras,{Extra,EMCount+1,ENMCount});
+				    {Extra,EMCount} ->
+					lists:keyreplace(Extra,1,Extras,{Extra,EMCount+1});
 				    _ ->
 					io:format("Unknown extra result: ~p in ~p~n",[Extra,smother_analysis:exp_printer(Exp)]),
-					unuse_extras(Extras)
+					Extras
 				end
 			end,
 		    [PatLog#pat_log{nmcount=PatLog#pat_log.nmcount+1,subs=NewSubs,extras=NewExtras}| apply_pattern_log(EVal,Es,Bindings)];
@@ -593,7 +588,7 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content}=Exp,subs=Subs},EVal,Bindin
 		    {NewSubs, no_extras}
 	    end;
 	_Val ->
-	    io:format("~p is not a list...~n",[_Val]),
+	    %% io:format("~p is not a list...~n",[_Val]),
 	    {Subs,not_a_list}
     end;
 process_subs(#pat_log{exp={fun_declaration,Loc,Rec},subs=Subs},_Eval,_Bindings) ->
@@ -606,11 +601,11 @@ process_subs(#pat_log{subs=Subs}=_S,_EVal,_Bindings) ->
     {Subs,no_extras}.
 
 make_extras({tree,tuple,_,_}) ->
-    [{tuple_size_mismatch,0,0},{not_a_tuple,0,0}];
+    [{tuple_size_mismatch,0},{not_a_tuple,0}];
 make_extras({tree,list,_Attrs,none}) ->
-    [{non_empty_list,0,0},{not_a_list,0,0}];
+    [{non_empty_list,0},{not_a_list,0}];
 make_extras({tree,list,_Attrs,{list,_,_}}) ->
-    [{empty_list,0,0},{list_size_mismatch,0,0},{not_a_list,0,0}];
+    [{empty_list,0},{list_size_mismatch,0},{not_a_list,0}];
 make_extras(_P) ->
     %%io:format("No extras for ~p~n",[P]),
     [].
