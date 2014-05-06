@@ -543,13 +543,16 @@ process_subs(#pat_log{exp={wrapper,integer,_Attrs,_Image},subs=Subs},_EVal,_Bind
     {Subs,no_extras};
 process_subs(#pat_log{exp={wrapper,nil,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
     {Subs,no_extras};
-process_subs(#pat_log{exp={tree,list,_Attrs,_Content},subs=Subs},EVal,Bindings) ->
+process_subs(#pat_log{exp={tree,list,_Attrs,_Content}=Exp,subs=Subs},EVal,Bindings) ->
     case abstract_revert(EVal) of
 	{cons,_OLine,Head,ValContent} ->
 	    ContentList = [Head | list_to_list(ValContent)],
-	    if length(Subs) == 0 ->
+	    %% This is necessary because the pattern builder strips some subs if the are variables etc.
+	    Comps = get_pattern_subcomponents(Exp),
+	    SLen = length(Comps),
+	    if SLen == 0 ->
 		    {Subs,non_empty_list};
-	       length(Subs) /= length(ContentList) ->
+	       SLen /= length(ContentList) ->
 		    {Subs,list_size_mismatch};
 	       true ->
 		    ZipList = lists:zip(Subs,ContentList),
