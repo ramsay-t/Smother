@@ -18,7 +18,8 @@
 %%     ├── tests1.erl
 %% @todo Add support for the preprocess option
 main([]) ->
-    main([file:get_cwd()]);
+    {ok, BaseDir} = file:get_cwd(),
+    main([BaseDir]);
 main([BaseDir]) ->
     main([BaseDir, filename:join([BaseDir, ".eunit", "smother"])]);
 main([BaseDir, DestDir]) ->
