@@ -30,13 +30,37 @@ function numcolour(val) {
     }
 }
 
+function bestpos(string, character, bestpos) {
+    var pos = string.indexOf(character,8);
+    if(pos < 0) {
+	return bestpos;
+    } else if(pos > bestpos) {
+	return bestpos;
+    } else {
+	return pos;
+    }
+}
+
 function load_subs(elem,sublist) {
     var table = "";
     table += "<table class=\"subtable\"><tr><td>&nbsp;</td><td>matched</td><td>non-matched</td></tr>";
     for(var i = 0; i < sublist.length; i++) {
 	r = sublist[i];
+	var exp = "";
+	var moreexp = r.exp;
+	while(moreexp.length > 20) {
+	    // Find a comma or space or something else sensible to break after
+	    var pos = bestpos(moreexp," ",20);
+	    pos = bestpos(moreexp,",",pos);
+	    pos = bestpos(moreexp,"}",pos);
+	    pos = bestpos(moreexp,")",pos);
+	    pos = bestpos(moreexp,"_",pos);
+	    exp += moreexp.substring(0,pos) + "<br />&nbsp;&nbsp;&nbsp;&nbsp;";
+	    moreexp = moreexp.substring(pos);
+	}
+	exp += moreexp;
 	table += "<tr><td>" 
-		    + r.exp 
+		    + exp 
 		    + "</td><td>" 
 		    + numcolour(r.matched)
 		    + "</td><td>" 

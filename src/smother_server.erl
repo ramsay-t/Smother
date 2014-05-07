@@ -300,7 +300,7 @@ init_file(Module,Source) ->
 start_if_needed() ->
     case global:whereis_name(smother_server) of
 	undefined ->
-	    gen_server:start({global,smother_server},smother_server,[],[]);
+	    gen_server:start_link({global,smother_server},smother_server,[],[]);
 	_ ->
 	    ok
     end.
@@ -542,7 +542,8 @@ process_subs(#pat_log{exp={wrapper,nil,_Attrs,_Image},subs=Subs},_EVal,_Bindings
     {Subs,no_extras};
 process_subs(#pat_log{exp={tree,list,_Attrs,_Content}=Exp,subs=Subs},EVal,Bindings) ->
     %% Get the true length, rather than the number of Subs, since some of those have been stripped
-    L = length(get_pattern_subcomponents(Exp)),
+    Comps = get_pattern_subcomponents(Exp),
+    L = length(Comps),
     case abstract_revert(EVal) of
 	{cons,_OLine,Head,ValContent} ->
 	    ContentList = [Head | list_to_list(ValContent)],
@@ -552,16 +553,24 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content}=Exp,subs=Subs},EVal,Bindin
 	       L /= length(ContentList) ->
 		    {Subs,list_size_mismatch};
 	       true ->
-		    ZipList = lists:zip(Subs,ContentList),
-		    NewSubs = lists:flatten(lists:map(fun({S,VC}) ->
-							      apply_pattern_log(
-								erl_parse:normalise(VC)
-								,[S]
-								,Bindings)
-						      end,
-						      ZipList)
-					   ),
-		    {NewSubs, no_extras}
+		    if Subs == [] ->
+			    {Subs,no_extras};
+			length(Subs) /= L ->
+			    %% FIXME - match when some subs are hidden?
+			    %%io:format("~p: ~p comps but ~p subs~n",[smother_analysis:exp_printer(Exp),length(Comps),length(Subs)]),
+			    exit({"Miss-matched params and sub-components.",ContentList,Comps,Subs});
+		       true ->
+			    ZipList = lists:zip(Subs,ContentList),
+			    NewSubs = lists:flatten(lists:map(fun({S,VC}) ->
+								      apply_pattern_log(
+									erl_parse:normalise(VC)
+									,[S]
+									,Bindings)
+							      end,
+							      ZipList)
+						   ),
+			    {NewSubs, no_extras}
+		    end
 	       end;
 	{nil,_OLine} ->
 	    if L /= 0 ->
