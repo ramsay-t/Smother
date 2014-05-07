@@ -410,8 +410,12 @@ wait_for_logging(MBS) ->
 	    Sec = TotSec - (Mins * 60),
 	    io:format("Waiting for the smother_server mailbox to clear...[~p messages, ~p msg/s - ~p mins ~.2f sec]~n",[MBS,MPS,Mins,Sec]),
 	    %% Wait one tenth of the expected time...
-	    timer:sleep(trunc(TotSec * 100)),
-	    wait_for_logging(mailbox_size())
+	    if TotSec > 1.0 ->
+		    timer:sleep(trunc(TotSec * 100)),
+		    wait_for_logging(mailbox_size());
+	       true ->
+		    wait_for_logging(mailbox_size())
+	    end
     end.
 
 %% @hidden
