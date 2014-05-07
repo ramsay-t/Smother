@@ -11,7 +11,7 @@ dv(A,B) ->
 dv_proc() ->
     receive
 	{From, {A,B}} when (A == 0) and (B > 4) ->
-	    From ! B / 1;
+	    From ! B;
 	{From, {A,B}} ->
 	    From ! B / A
     end.

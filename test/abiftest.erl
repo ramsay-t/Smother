@@ -3,7 +3,7 @@
 
 dv(A,B) ->
     if (A == 0) and (B > 4) ->
-	    B / 1;
+	    B;
        true ->
 	    B / A
     end.

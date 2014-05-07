@@ -389,17 +389,28 @@ mailbox_size() ->
 wait_for_logging_to_finish() ->
    wait_for_logging(mailbox_size()).
 
+measure_mailbox_speed() ->
+    First = mailbox_size(),
+    timer:sleep(100),
+    Second = mailbox_size(),
+    (First - Second) * 10.
+
 wait_for_logging({error,smother_not_started}) ->
     {error,smother_not_started};
 wait_for_logging(MBS) ->
     if MBS =< 0 ->
 	    ok;
-       MBS < 500 ->
+       MBS < 10000 ->
 	    timer:sleep(50),
 	    wait_for_logging(mailbox_size());
        true ->
-	    io:format("Waiting for the smother_server mailbox to clear...[~p messages]~n",[MBS]),
-	    timer:sleep(1000),
+	    MPS = measure_mailbox_speed(),
+	    TotSec = MBS / MPS,
+	    Mins = trunc(TotSec / 60),
+	    Sec = TotSec - (Mins * 60),
+	    io:format("Waiting for the smother_server mailbox to clear...[~p messages, ~p msg/s - ~p mins ~.2f sec]~n",[MBS,MPS,Mins,Sec]),
+	    %% Wait one tenth of the expected time...
+	    timer:sleep(trunc(TotSec * 100)),
 	    wait_for_logging(mailbox_size())
     end.
 

@@ -300,7 +300,7 @@ init_file(Module,Source) ->
 start_if_needed() ->
     case global:whereis_name(smother_server) of
 	undefined ->
-	    gen_server:start_link({global,smother_server},smother_server,[],[]);
+	    gen_server:start({global,smother_server},smother_server,[],[]);
 	_ ->
 	    ok
     end.
