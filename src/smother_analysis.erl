@@ -431,7 +431,7 @@ all_nonmatchable(_W) ->
 is_single_item(Is,1) ->
     all_nonmatchable(tl(Is));
 is_single_item(Is,N) when N == length(Is) ->
-    all_nonmatchable(lists:sublist(Is,N));
+    all_nonmatchable(lists:sublist(Is,N-1));
 is_single_item(Is,N) ->
     all_nonmatchable(lists:sublist(Is,N-1) ++ lists:nthtail(N,Is)).
 
