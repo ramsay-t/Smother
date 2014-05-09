@@ -9,7 +9,7 @@ dv(A,B) ->
     B / A.
 
 full_test() ->
-    {_Z,NZ,_P} = abtest:do_tests(?MODULE,[{0,5},{5,5},{5,0},{0,2}]),
+    {_Z,NZ,_P} = abtest:do_dv_tests(?MODULE,[{0,5},{5,5},{5,0},{0,2}]),
     ?assert(abtest:contains(NZ,[
 				{matched,{{6,4},{6,6}},[]},
 				{matched,{{6,15},{6,32}},[{{6,4},{6,6}}]},
@@ -26,7 +26,7 @@ full_test() ->
 			       ])).
 
 cond_dec_test() ->
-    {Z,NZ,_P} = abtest:do_tests(?MODULE,[{0,5},{5,5},{5,0}]),
+    {Z,NZ,_P} = abtest:do_dv_tests(?MODULE,[{0,5},{5,5},{5,0}]),
     ?assert(abtest:contains(NZ,[
 				{matched,{{6,4},{6,6}},[]},
 				{matched,{{6,15},{6,32}},[{{6,4},{6,6}}]},

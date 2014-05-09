@@ -218,19 +218,41 @@ measure_coverage(#pat_log{mcount=MCount,exp={wrapper,variable,_Attrs,_Image}=Exp
 		  matched=MCount,
 		  nonmatched=-1
 		 };
-measure_coverage(#pat_log{mcount=MCount,exp={wrapper,nil,_Attrs,_Image}=Exp},Context) ->
-    #analysis_report{
-		  exp=Exp,
-		  context=Context,
-		  loc=get_range(Exp),
-		  type=pat,
-		  matched=MCount,
-		  nonmatched=-1
-		 };
+%% measure_coverage(#pat_log{mcount=MCount,exp={wrapper,nil,_Attrs,_Image}=Exp},Context) ->
+%%     #analysis_report{
+%% 		  exp=Exp,
+%% 		  context=Context,
+%% 		  loc=get_range(Exp),
+%% 		  type=pat,
+%% 		  matched=MCount,
+%% 		  nonmatched=-1
+%% 		 };
 measure_coverage(#pat_log{exp=Exp,mcount=MCount,nmcount=NMCount,subs=Subs,extras=Extras},Context) ->
     Loc = get_range(Exp),
-    NMSubs = lists:map(fun(S) -> measure_coverage(S,Context++[{non_matched,Loc}]) end, Subs),
-    ESubs = lists:map(fun(S) -> measure_coverage(S,Context++[{extra,Loc}]) end, Extras),
+    S = lists:map(fun(S) -> measure_coverage(S,Context++[{non_matched,Loc}]) end, Subs),
+
+    %% If all but one have N/A non-matched status, then that one
+    %% can have N/A matched status (e.g. only one element isn't a variable.
+    NMSubs = if length(S) > 1 ->
+	    case single_item(S) of
+		{yes, N, I} ->
+		    case N of
+			1 ->
+			    [I#analysis_report{matched=-1}] ++ lists:nthtail(N,S);
+			N when N == length(S) ->
+			    lists:sublist(S,N-1) ++ [I#analysis_report{matched=-1}];
+			_ ->
+			    lists:sublist(S,N-1) ++ [I#analysis_report{matched=-1}] ++ lists:nthtail(N,S)
+		    end;
+		_ -> 
+		    S
+	    end;
+       true ->
+	    S
+    end,
+
+
+    ESubs = lists:map(fun(Sb) -> measure_coverage(Sb,Context++[{extra,Loc}]) end, Extras),
     #analysis_report{
 		      exp=Exp,
 		      context=Context,
@@ -386,9 +408,10 @@ get_reports([L = #bool_log{exp=Exp,tsubs=TSubs,fsubs=FSubs} | More],Context) ->
 get_reports([L = #pat_log{exp=Exp,guards=Gs,subs=Subs,matchedsubs=MatchedSubs} | More],Context) ->
     LReport = measure_coverage(L,Context),
     Loc = get_range(Exp),
-    MergedSubs = merge_evals(Subs,MatchedSubs),
+    S = merge_evals(Subs,MatchedSubs),
+
     [ LReport#analysis_report{context=Context}
-     | get_reports(MergedSubs,Context++[Loc]) ++ get_reports(lists:flatten(Gs),Context++[Loc]) ++ get_reports(More,Context)];
+     | get_reports(S,Context++[Loc]) ++ get_reports(lists:flatten(Gs),Context++[Loc]) ++ get_reports(More,Context)];
 get_reports([{_Loc,L=#pat_log{}} | More],Context) ->
     get_reports([L | More],Context);
 get_reports([{_Loc,L=#bool_log{}} | More],Context) ->
@@ -396,6 +419,39 @@ get_reports([{_Loc,L=#bool_log{}} | More],Context) ->
 get_reports([E | More],Context) ->
     io:format("Unhandled report: ~p in context ~p~n",[E,Context]),
     get_reports(More,Context).
+
+
+all_nonmatchable([]) ->
+    true;
+all_nonmatchable([#analysis_report{nonmatched=NM} | Ps]) when NM < 0 ->
+    all_nonmatchable(Ps);
+all_nonmatchable(_W) ->
+    false.
+
+is_single_item(Is,1) ->
+    all_nonmatchable(tl(Is));
+is_single_item(Is,N) when N == length(Is) ->
+    all_nonmatchable(lists:sublist(Is,N));
+is_single_item(Is,N) ->
+    all_nonmatchable(lists:sublist(Is,N-1) ++ lists:nthtail(N,Is)).
+
+single_item(Is) ->
+    Hits = lists:foldl(fun(N,Acc) ->
+			       case is_single_item(Is,N) of
+				   true ->
+				       Acc ++ [{N,lists:nth(N,Is)}];
+				   _ ->
+				       Acc
+			       end
+		       end,
+		       [],
+		       lists:seq(1,length(Is))),
+    case Hits of
+	[{N,Item}] ->
+	    {yes,N,Item};
+	_ ->
+	    no
+    end.
 
 
 merge_evals([],[]) ->

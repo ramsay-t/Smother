@@ -1,6 +1,6 @@
 -module(abtest).
 -export([dv/2]).
--export([do_tests/2,contains/2]).
+-export([do_tests/2,do_dv_tests/2,contains/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -10,12 +10,16 @@ dv(A,B) ->
     B / A.
 
 do_tests(Module,Ts) ->
-    smother:compile("../test/" ++ atom_to_list(Module) ++ ".erl"),
-    lists:map(fun({A,B}) ->
-		      catch Module:dv(A,B)
+    smother:compile("test/" ++ atom_to_list(Module) ++ ".erl"),
+    lists:map(fun({Fun,Args}) ->
+		      catch erlang:apply(Module,Fun,Args)
 	      end,Ts),
     smother:analyse_to_file(Module),
     {smother:get_zeros(Module), smother:get_nonzeros(Module),smother:get_percentage(Module)}.
+
+do_dv_tests(Module,Ts) ->
+    DTs = lists:map(fun({A,B}) -> {dv,[A,B]} end, Ts),
+    do_tests(Module,DTs).
 
 contains(_List,[]) ->
     true;
@@ -28,7 +32,7 @@ contains(List,[I|Is]) ->
     end.
 
 full_test() ->
-    {_Z,NZ,_P} = do_tests(?MODULE,[{0,5},{5,5},{5,0},{0,2}]),
+    {_Z,NZ,_P} = do_dv_tests(?MODULE,[{0,5},{5,5},{5,0},{0,2}]),
     ?assert(contains(NZ,[
 			 {matched,{{7,4},{7,6}},[]},
 			 {non_matched,{{7,4},{7,6}},[]},
@@ -44,7 +48,7 @@ full_test() ->
 			])).
 
 cond_dec_test() ->
-    {Z,NZ,_P} = do_tests(?MODULE,[{0,5},{5,5},{5,0}]),
+    {Z,NZ,_P} = do_dv_tests(?MODULE,[{0,5},{5,5},{5,0}]),
     ?assert(contains(NZ,[
 			 {matched,{{7,4},{7,6}},[]},
 			 {non_matched,{{7,4},{7,6}},[]},
