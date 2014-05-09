@@ -7,5 +7,5 @@ do_nothing() ->
 do_little(_) ->
     io:format("I don't care what you told me...~n").
 
-internal([]) ->
-    io:format("Wait, what?~n").
+%% internal([]) ->
+%%     io:format("Wait, what?~n").

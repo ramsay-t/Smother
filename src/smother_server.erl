@@ -413,12 +413,66 @@ build_pattern_record(E) ->
     
     Subs = case all_vars(Comps) of
     	       true -> [];
-    	       _ -> lists:map(fun ?MODULE:build_pattern_record/1,Comps)
+    	       _ -> 
+		   S = lists:map(fun ?MODULE:build_pattern_record/1,Comps),
+		   %% If all but one have N/A non-matched status, then that one
+		   %% can have N/A matched status (e.g. only one element isn't a variable.
+		   if length(S) > 1 ->
+			   case single_item(S) of
+			       {yes, N, I} ->
+				   case N of
+				       1 ->
+					   [I#pat_log{mcount=-1}] ++ lists:nthtail(N,S);
+				       N when N == length(S) ->
+					   lists:sublist(S,N-1) ++ [I#pat_log{mcount=-1}];
+				       _ ->
+					   lists:sublist(S,N-1) ++ [I#pat_log{mcount=-1}] ++ lists:nthtail(N,S)
+				       end;
+			       _ -> 
+				   S
+			   end;
+		      true ->
+			   S
+		   end
     	   end,
+
+
     %%_WhoCares = all_vars(Comps),
     %%Subs = lists:map(fun ?MODULE:build_pattern_record/1,Comps),
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs}.
+
+all_nonmatchable([]) ->
+    true;
+all_nonmatchable([#pat_log{nmcount=-1} | Ps]) ->
+    all_nonmatchable(Ps);
+all_nonmatchable(_) ->
+    false.
+
+is_single_item(Is,1) ->
+    all_nonmatchable(tl(Is));
+is_single_item(Is,N) when N == length(Is) ->
+    all_nonmatchable(lists:sublist(Is,N));
+is_single_item(Is,N) ->
+    all_nonmatchable(lists:sublist(Is,N-1) ++ lists:nthtail(N,Is)).
+
+single_item(Is) ->
+    Hits = lists:foldl(fun(N,Acc) ->
+			       case is_single_item(Is,N) of
+				   true ->
+				       Acc ++ [{N,lists:nth(N,Is)}];
+				   _ ->
+				       Acc
+			       end
+		       end,
+		       [],
+		       lists:seq(1,length(Is))),
+    case Hits of
+	[{N,Item}] ->
+	    {yes,N,Item};
+	_ ->
+	    no
+    end.
 
 add_match([]) ->
     [];

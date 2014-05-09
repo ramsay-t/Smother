@@ -1,10 +1,10 @@
 -module(ablisttest).
--export([dv/2]).
+-export([dv/1]).
 
-dv(A,B) ->
-    case [A,B] of
+dv(Arg) ->
+    case Arg of
 	[0,5] ->
-	    B;
-	_ ->
+	    5;
+	[A,B] ->
 	    B / A
     end.
