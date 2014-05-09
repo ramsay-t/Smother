@@ -56,7 +56,7 @@ compile(Filename,Options) ->
 
     smother_server:store_zero(),
 
-    case compile:forms(Forms,[binary,debug_info,verbose,report_errors,report_warnings]) of
+    case compile:forms(Forms,[binary,debug_info,verbose,report_errors,report_warnings,{source,TrueFile}]) of
 	{ok,Module,Binary} ->
 	    code:load_binary(Module,TrueFile,Binary);
 	Error ->
