@@ -414,6 +414,7 @@ wait_for_logging(MBS) ->
 		    timer:sleep(trunc(TotSec * 100)),
 		    wait_for_logging(mailbox_size());
 	       true ->
+		    timer:sleep(1000),
 		    wait_for_logging(mailbox_size())
 	    end
     end.
