@@ -12,7 +12,7 @@
 
 -export([store_zero/0]).
 
--export([all_vars/1,get_pattern_subcomponents/1]).
+-export([all_vars/1,get_pattern_subcomponents/1,list_from_list/1]).
 
 %% @private
 init(Dict) ->

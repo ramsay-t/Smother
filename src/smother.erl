@@ -166,22 +166,64 @@ rename_underscores(A) ->
     end.
 
 %% @hidden
+get_record_fields_as_bindings({tree,record_field,_,{record_field,{wrapper,atom,_Attrs,Name},Binding}}=Field) ->
+    Loc = smother_analysis:get_range(Field),
+    {Name,Binding,Loc}.
+
+%% @hidden
+make_arg_from_record(Name,Loc,Bindings) ->
+    BindingTuples = "[" 
+	++ lists:foldl(fun({N,B,L},Acc) -> 
+			       Item = lists:flatten(io_lib:format("{~s,~s,~w}",[?PP(N),?PP(B),L])),
+			       case Acc of 
+				   "" -> 
+				       Item;
+				   _  ->
+				       Acc ++ "," ++ Item
+			       end
+				      %% {tree,tuple,{attr,Loc,[{range,Loc}],none},
+				      %%  [
+				      %% 	{wrapper,atom,{attr,Loc,[{range,Loc}],none},{atom,Loc,N}}
+				      %% 	,B
+				      %% 	,make_loc_tuple(L)
+				      %%  ]} 
+		       end,
+		       "",
+		       Bindings) 
+	++ "]",
+    io:format("Made: ~p~n",[BindingTuples]),
+    lists:flatten(io_lib:format("{~p,~p,~s}",[Name,Loc,BindingTuples])).
+
+%% @hidden
 get_useful_args(A) ->
     case A of
 	{tree,match_expr,_Attrs,{match_expr, Left,Right}} ->
 	    case Left of
-		{wrapper,variable,VAttrs,Image} ->
-		    {wrapper,variable,VAttrs,Image};
+		{wrapper,variable,_VAttrs,Image} ->
+		    %%{wrapper,variable,VAttrs,Image};
+		    Image;
 		_ ->
 		    case Right of
-			{wrapper,variable,VAttrs,Image} ->
-			    {wrapper,variable,VAttrs,Image};
+			{wrapper,variable,_VAttrs,Image} ->
+			   %% {wrapper,variable,VAttrs,Image};
+			    Image;
 			_ ->
-			    A
+			    %% A
+			    ?PP(A)
 		    end
 	    end;
+	{tree,record_expr,_Attrs,{record_expr,none,{tree,atom,_,Name},Content}} ->
+	    Bindings = lists:map(fun get_record_fields_as_bindings/1, Content),
+	    Loc = smother_analysis:get_range(A),
+	    %%io:format("Started with ~p~n~n",[A]),
+	    RA = make_arg_from_record(Name,Loc,Bindings),
+	    io:format("record ~p~n",[RA]),
+	    RA;
+	{tree,record_expr,_Attrs,_Details} ->
+	    exit({"Unhandled record expression",A});
 	_ ->
-	    A
+	    %% A
+	    ?PP(A)
     end.
 
 %% @private
@@ -198,12 +240,13 @@ rules(Module) ->
 	       FName = erl_parse:normalise(wrangler_syntax:revert(_W_f@)),
 	       reset_var_server(),
 	       NewArgs@@ = lists:map(fun rename_underscores/1, Args@@),
-	       OnlyUsefulArgs@@ = lists:map(fun get_useful_args/1, NewArgs@@),
+	       OnlyUsefulArgs = lists:map(fun get_useful_args/1, NewArgs@@),
+	       OnlyUsefulArgString = "[" ++ lists:foldl(fun(I,Acc) -> case Acc of "" -> I; _ -> Acc ++ "," ++ I end end, "", OnlyUsefulArgs) ++ "]",
 	       Declare = {fun_case,FName,length(Args@@),Args@@,Guard@@},
 	       smother_server:declare(Module,Loc,Declare),
 	       %%NewBody@@ = sub_instrument(Body@@,rules(Module)),
 	       %%io:format("f NewBody@@: ~p~n", [length(NewBody@@)]),
-	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[OnlyUsefulArgs@@]), Body@@;")
+	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ "," ++ OnlyUsefulArgString ++ "), Body@@;")
 	   end
 	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)) and not (api_refac:start_end_loc(_This@) == {{0,0},{0,0}})),
      ?RULE(?T("if Guards@@@ -> Body@@@ end"),
