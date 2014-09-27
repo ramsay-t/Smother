@@ -755,6 +755,8 @@ get_percentage(File) ->
     case analyse(File) of
     	 {error,Msg} ->
   	     {error,Msg};
+    	 {error,M1,Msg} ->
+  	     {error,M1,Msg};
 	 {ok,Analysis} ->
 	     smother_analysis:get_percentage(Analysis)
     end.

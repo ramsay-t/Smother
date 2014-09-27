@@ -11,10 +11,19 @@
 	  d=42
 	}).
 
+-record(subrecord,
+	{
+	  i=0,
+	  j=0
+	}).
+
+dv(#abrecord{a=_,b=#subrecord{i=I,j=J}}) ->
+    I / J;
 dv(#abrecord{a=0,b=5}) ->
     5;
 dv(#abrecord{a=A,b=B}) ->
     B / A.
+
 
 full_test() ->
     {_Z,NZ,_P} = abtest:do_dv_tests(?MODULE,[{0,5},{5,5},{5,0},{0,2}]),
