@@ -17,6 +17,11 @@
 	  j=0
 	}).
 
+f([A,B]=C) ->
+    C.
+
+dv(#abrecord{a=_,b=#subrecord{i=I,j=J}}) when (J == 0) ->
+    I;
 dv(#abrecord{a=_,b=#subrecord{i=I,j=J}}) ->
     I / J;
 dv(#abrecord{a=0,b=5}) ->
@@ -24,6 +29,9 @@ dv(#abrecord{a=0,b=5}) ->
 dv(#abrecord{a=A,b=B}) ->
     B / A.
 
+compile_test() ->
+    smother:compile("../test/" ++ atom_to_list(?MODULE) ++ ".erl"),
+    ?assertEqual(0.5, abrecordtest:dv(#abrecord{a=1,b=#subrecord{i=2,j=4}})).
 
 full_test() ->
     {_Z,NZ,_P} = abtest:do_dv_tests(?MODULE,[{0,5},{5,5},{5,0},{0,2}]),

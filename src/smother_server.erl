@@ -376,8 +376,12 @@ get_pattern_subcomponents({wrapper,nil,_Attrs,_Image}) ->
     [];
 get_pattern_subcomponents({fun_declaration,_Loc,Args}) ->
     Args;
+get_pattern_subcomponents({tree,record_expr,_Attrs,{record_expr,none,_Name,Content}}) ->
+    Content;
+get_pattern_subcomponents({tree,record_field,_Attrs,{record_field,_Name,Content}}) ->
+    get_pattern_subcomponents(Content);
 get_pattern_subcomponents(_V) ->
-    %%io:format("UNKNOWN pattern expression type:~n~p~n~n", [V]),
+    %%io:format("UNKNOWN pattern expression type:~n~p~n~n", [_V]),
     [].
 
 build_bool_record(E) ->
@@ -398,8 +402,14 @@ build_pattern_record({wrapper,variable,_Attrs,_Image}=E) ->
     %% Its not meaningful to consider sub components and non-matches of variables...
     #pat_log{exp=E,nmcount=-1,subs=[],extras=[],matchedsubs=[]};
 build_pattern_record({wrapper,underscore,_Attrs,_Image}=E) ->
-    %% Its not meaningful to consider sub components and non-matches of variables...
+    %% Its not meaningful to consider sub components and non-matches of underscores!
     #pat_log{exp=E,nmcount=-1,subs=[],extras=[],matchedsubs=[]};
+%% build_pattern_record({smother_record,Name,Loc,Content}=E) ->
+%%     %% Records are processed by the compiler
+%%     #pat_log{exp=E,nmcount=-1,subs=lists:map(fun build_pattern_record/1, Content),extras=[],matchedsubs=[]};
+%% build_pattern_record({smother_record_element,Name,Loc,Exp}=E) ->
+%%     %% Records are processed by the compiler
+%%     #pat_log{exp=E,nmcount=-1,subs=Exp,extras=[],matchedsubs=[]};
 build_pattern_record({E,Gs}) ->
     EPat = build_pattern_record(E),
     GuardPats = lists:flatten(lists:map(fun(G) ->
@@ -410,21 +420,12 @@ build_pattern_record({E,Gs}) ->
 build_pattern_record([E]) ->
     build_pattern_record(E);
 build_pattern_record(E) ->
-    %%io:format("No guards...?~n"),
-    %%io:format("Single HIT:~p~n",[E]),
     Comps = get_pattern_subcomponents(E),
-    
     Subs = case all_vars(Comps) of
     	       true -> [];
     	       _ -> 
 		   lists:map(fun ?MODULE:build_pattern_record/1,Comps)
-		   %% S = lists:map(fun ?MODULE:build_pattern_record/1,Comps),
-		   %% 
     	   end,
-
-
-    %%_WhoCares = all_vars(Comps),
-    %%Subs = lists:map(fun ?MODULE:build_pattern_record/1,Comps),
     Extras = make_extras(E),
     #pat_log{exp=E,subs=Subs,extras=Extras,matchedsubs=Subs}.
 
@@ -439,7 +440,53 @@ add_match([S | Ss]) ->
 
 apply_pattern_log(_EVal,[],_Bindings) ->
     [];
+apply_pattern_log({smother_record,Fields,Values}=EVal,
+		  [#pat_log{
+		      exp={tree,record_expr,_Attr,{record_expr,none,{tree,atom,_NAttr,Name},_ExpContent}}
+			   ,subs=_Subs,guards=Guards,extras=Extras}=PatLog | Es]
+		   ,Bindings)->
+    
+    %% This is the case where a record is matched but we need to confirm whether all the components match
+    %% If the record has completely miss-matched we would not be here
+    NewBindings = 
+	lists:zip([smother_record_name|Fields],tuple_to_list(Values)),
+    
+    %% Now check for guard matches...
+    {Result,NewGuards} = 
+    	try 
+    	    match_guards(Guards,Bindings++NewBindings)
+    	catch error:{unbound_var,V} ->
+    		io:format("Error: unbound var ~p~n",[V]),
+    		{fail,Guards}
+    	end,
+    case process_subs(PatLog,EVal,Bindings) of
+    	{NewSubs,Extra} ->
+    	    NewExtras = 
+    		case Extra of
+    		    no_extras ->
+    			Extras;
+    		    _ ->
+    			case lists:keyfind(Extra,1,Extras) of
+    			    {Extra,EMCount} ->
+    				lists:keyreplace(Extra,1,Extras,{Extra,EMCount+1});
+    			    _ ->
+    				io:format("Unknown extra result: ~p in record ~p~n",[Extra,Name]),
+    				Extras
+    			end
+    		end,
+    	    case Result of
+    		ok ->
+    		    %% Guards passed, so don't show evaluation of further patterns
+    		    [PatLog#pat_log{mcount=PatLog#pat_log.mcount+1,subs=NewSubs,extras=NewExtras,guards=NewGuards}|Es];
+		
+    		fail ->
+    		    [PatLog#pat_log{mcount=PatLog#pat_log.mcount+1,subs=NewSubs,extras=NewExtras,guards=NewGuards}| apply_pattern_log(EVal,Es,Bindings)]
+    	    end;
+    	Err ->
+    	    exit({"Unexpected result from process_subs",Err})
+    end;
 apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | Es],Bindings) ->
+    %%io:format("FALLTHROUGH:~n~p~n~p~n------------------------------~n",[EVal,Exp]),
     ValStx = abstract_revert(EVal),
     try
 	%% io:format("Reverting ~p~n~n",[PatLog#pat_log.exp]),
@@ -476,7 +523,7 @@ apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | E
     catch
 	error:_Msg ->
 	    %%io:format("Non-Match!  ~p~n",[_Msg]),
-	    %%io:format("No Match: ~p vs ~p~n~p~n",[revert(PatLog#pat_log.exp),ValStx,Msg]),
+	    %%io:format("No Match: ~p vs ~p~n~p~n",[revert(PatLog#pat_log.exp),ValStx,_Msg]),
 	    case process_subs(PatLog,EVal,Bindings) of
 		{NewSubs,Extra} ->
 		    NewExtras = 
@@ -614,8 +661,25 @@ process_subs(#pat_log{exp={fun_declaration,Loc,Rec},subs=Subs},_Eval,_Bindings) 
     {Subs,no_extras};
 process_subs(#pat_log{exp={wrapper,atom,_Attrs,_Image},subs=Subs},_EVal,_Bindings) ->
     {Subs,no_extras};
+process_subs(#pat_log{exp={tree,record_expr,_Attrs,{record_expr,none,_NameTree,_Content}},subs=Subs}=_S,{smother_record,Fields,Values},Bindings) ->
+    %% Re-ordering the elements of a record shouldn't - of itself - cause a miss-match, so this has to cope with
+    %% the element values being in a different order
+    ValPairs = lists:zip([smother_record_name|Fields],tuple_to_list(Values)),
+    NewSubs = lists:map(fun(#pat_log{exp={tree,record_field,_SAttrs,{record_field,{wrapper,atom,_NAttrs,{atom,_,SubName}},Content}}}=SPL) ->
+				   case lists:keyfind(SubName,1,ValPairs) of
+				       false ->
+					   SPL#pat_log{nmcount = SPL#pat_log.nmcount+1};
+				       {SubName,SubEVal} ->
+					   %% Apply the binding for this field to an imaginary pattern log that has all the same values, but 
+					   %% only the content expression
+					   SubSub = hd(apply_pattern_log(SubEVal,[SPL#pat_log{exp=Content}],Bindings)),
+					   SubSub#pat_log{exp=SPL#pat_log.exp}
+				   end
+			end,
+			Subs),
+    {NewSubs,no_extras};
 process_subs(#pat_log{subs=Subs}=_S,_EVal,_Bindings) ->
-    %%io:format("Don't know how to process sub: ~p~nwith ~p under ~p~n", [revert(S#pat_log.exp),EVal,Bindings]),
+    %%io:format("Don't know how to process subs for: ~p~nwith ~p under ~p~n", [_S#pat_log.exp,_EVal,_Bindings]),
     {Subs,no_extras}.
 
 make_extras({tree,tuple,_,_}) ->
@@ -687,24 +751,10 @@ revert(Exp) ->
 apply_fun_log(_Loc,_LogData,[]) ->
     [];
 apply_fun_log(Loc,LogData,[{Loc,Rec} | Ps]) ->
-    %%io:format("MATCH: ~p vs ~p~n",[LogData,Rec]),
     NewSubs = hd(apply_pattern_log(LogData,[Rec],[])),
-    %%ZipList = lists:zip(LogData,Subs),
-    %% FIXME content
-    %%NewSubs = lists:map(fun({D,S}) -> 
-%%			       hd(apply_pattern_log(D,[S],[]))
-%%		       end,
-%%		       ZipList),
     [{Loc,NewSubs} | Ps];
 apply_fun_log(Loc,LogData,[{PreLoc,Rec} | Ps]) ->
-    %%io:format("NONMATCH: ~p vs ~p~n",[LogData,Rec]),
     NewSubs = hd(apply_pattern_log(LogData,[Rec],[])),
-%%    ZipList = lists:zip(LogData,Subs),
-    %% FIXME content
-%%    NewSubs = lists:map(fun({D,S}) -> 
-%%			       hd(apply_pattern_log(D,[S],[]))
-%%		       end,
-%%		       ZipList),
     [{PreLoc,NewSubs} | apply_fun_log(Loc,LogData,Ps)].
 
 
