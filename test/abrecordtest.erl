@@ -17,9 +17,6 @@
 	  j=0
 	}).
 
-f([A,B]=C) ->
-    C.
-
 dv(#abrecord{a=_,b=#subrecord{i=I,j=J}}) when (J == 0) ->
     I;
 dv(#abrecord{a=_,b=#subrecord{i=I,j=J}}) ->

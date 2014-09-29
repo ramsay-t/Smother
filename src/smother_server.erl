@@ -380,6 +380,8 @@ get_pattern_subcomponents({tree,record_expr,_Attrs,{record_expr,none,_Name,Conte
     Content;
 get_pattern_subcomponents({tree,record_field,_Attrs,{record_field,_Name,Content}}) ->
     get_pattern_subcomponents(Content);
+get_pattern_subcomponents({tree,match_expr,_Attrs,{match_expr,Left,Right}}) ->
+    get_pattern_subcomponents(Left) ++ get_pattern_subcomponents(Right);
 get_pattern_subcomponents(_V) ->
     %%io:format("UNKNOWN pattern expression type:~n~p~n~n", [_V]),
     [].
@@ -578,16 +580,23 @@ process_subs(#pat_log{exp={tree,tuple,_Attrs,Content}=_Exp,subs=Subs},EVal,Bindi
 		    {Subs,tuple_size_mismatch};
 	       true ->
 		    %% Tuple subs should always be the same order as the tuple content...
-		    ZipList = lists:zip(Subs,ValContent),
-		    NewSubs=lists:flatten(lists:map(fun({S,VC}) -> 
-							    apply_pattern_log(
-							      erl_parse:normalise(VC)
-							      ,[S]
-							      ,Bindings) 
-						    end,
-						    ZipList)
-					 ),
-		    {NewSubs, no_extras}
+		    case all_vars(Content) of
+			true ->
+			    %% The Subs will have been pruned
+			    %% So, subs is probably == []
+			    {Subs,no_extras};
+			_ ->
+			    ZipList = lists:zip(Subs,ValContent),
+			    NewSubs=lists:flatten(lists:map(fun({S,VC}) -> 
+								    apply_pattern_log(
+								      erl_parse:normalise(VC)
+								      ,[S]
+								      ,Bindings) 
+							    end,
+							    ZipList)
+						 ),
+			    {NewSubs, no_extras}
+		    end
 	    end;
 	_Val ->
 	    {Subs,not_a_tuple}
