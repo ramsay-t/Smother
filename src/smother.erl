@@ -215,7 +215,8 @@ rules(Module) ->
 	       OnlyUsefulArgString = "[" ++ lists:foldl(fun(I,Acc) -> case Acc of "" -> I; _ -> Acc ++ "," ++ I end end, "", OnlyUsefulArgs) ++ "]",
 	       Declare = {fun_case,FName,length(Args@@),Args@@,Guard@@},
 	       smother_server:declare(Module,Loc,Declare),
-	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ "," ++ OnlyUsefulArgString ++ "), Body@@;")
+	       NewBody@@ = sub_instrument(Body@@,rules(Module)),
+	       ?TO_AST("f@(NewArgs@@) when Guard@@-> smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ "," ++ OnlyUsefulArgString ++ "), NewBody@@;")
 	   end
 	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)) and not (api_refac:start_end_loc(_This@) == {{0,0},{0,0}})),
      ?RULE(?T("if Guards@@@ -> Body@@@ end"),
@@ -229,9 +230,9 @@ rules(Module) ->
 	       VarListString = re:replace(lists:flatten(io_lib:format("~p", [VarList])),"'","",[{return,list},global]),
 	       Declare = {if_expr,VarList,Guards@@@},
 	       smother_server:declare(Module,Loc,Declare),
-	       %%NewBody@@@ = lists:map(fun(B) -> sub_instrument(B,rules(Module)) end, Body@@@),
+	       NewBody@@@ = lists:map(fun(B) -> sub_instrument(B,rules(Module)) end, Body@@@),
 	       %%io:format("If NewBody@@@: ~p~n",[length(NewBody@@@)]),
-	       ?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> Body@@@ end end")
+	       ?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ "," ++ VarListString ++ "), if Guards@@@ -> NewBody@@@ end end")
 	   end
 	   ,(api_refac:type(_This@)/=attribute) and not lists:member(api_refac:start_end_loc(_This@), get(smother_instrumented)) and not (api_refac:start_end_loc(_This@) == {{0,0},{0,0}})),
      ?RULE(?T("case Expr@@ of Pats@@@ when Guards@@@ -> Body@@@ end"),
@@ -259,8 +260,8 @@ rules(Module) ->
 			    fun({{P@@,G@@},B@@}) ->
 				    CP = next_free_var_number(),
 				    NewP@@ = [?TO_AST("P@@ = SMOTHER_CASE_PATTERN" ++ CP)],
-				    %%NewB@@ = sub_instrument(B@@,rules(Module)),
-				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_CASE_PATTERN" ++ CP ++ " | " ++ VarListString ++ "]), B@@ end")]}
+				    NewB@@ = sub_instrument(B@@,rules(Module)),
+				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_CASE_PATTERN" ++ CP ++ " | " ++ VarListString ++ "]), NewB@@ end")]}
 			    end,
 			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
 			   )),
@@ -295,9 +296,9 @@ rules(Module) ->
 							,"'","",[{return,list},global]
 						       ),"\"","'",[{return,list},global]),
 
-				    %%NewB@@ = sub_instrument(B@@,rules(Module)),
+				    NewB@@ = sub_instrument(B@@,rules(Module)),
 
-				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_REC_PATTERN" ++ CP ++ " | " ++ VarListString ++ "]), B@@ end")]}
+				    {NewP@@,[?TO_AST("begin smother_server:log(" ++ atom_to_list(Module) ++ "," ++ LocString ++ ",[SMOTHER_REC_PATTERN" ++ CP ++ " | " ++ VarListString ++ "]), NewB@@ end")]}
 			    end,
 			    lists:zip(lists:zip(Pats@@@,Guards@@@),Body@@@)
 			   )),

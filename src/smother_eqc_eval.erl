@@ -1,33 +1,34 @@
 -module(smother_eqc_eval).
 
--export([make_tests/5,compare/4,compare_n/7,suite_name/3]).
+-export([make_tests/6,compare/4,compare_n/8,suite_name/4]).
 
-suite_name(Module,NumTests,ID) ->
-    list_to_atom(lists:flatten(io_lib:format("~p_~p_~p",[Module,NumTests,ID]))).
+suite_name(Module,NumTests,ID,SuiteFolder) ->
+    filename:join(SuiteFolder,list_to_atom(lists:flatten(io_lib:format("~p_~p_~p",[Module,NumTests,ID])))).
 
-make_tests(Module, EQC, Prop, NumTests, ID) ->
+make_tests(Module, EQC, Prop, NumTests, ID, SuiteFolder) ->
     GStart = now(),
     {random,Tests} = eqc_suite:random(eqc:numtests(NumTests,apply(EQC,Prop,[]))),
     GEnd = now(),
-    Name = suite_name(Module,NumTests,ID),
+    Name = suite_name(Module,NumTests,ID,SuiteFolder),
     io:format("Generated ~p tests in ~.2f sec.~n",[length(Tests),timer:now_diff(GEnd,GStart)/1000000]),
     eqc_suite:write(Name,{random,Tests}),
     {ok,length(Tests)}.
 
-compare_n(Module,EQC,Prop,Start,End,Step,ID) ->
-    SuiteFile = suite_name(Module,End,ID),
-
-    {random,Tests} = case filelib:is_file(SuiteFile) of
-			 true ->
-			     {ok, Binary} = file:read_file(SuiteFile),
-			     binary_to_term(Binary);
-			 false ->
-			     eqc_suite:random(eqc:numtests(End,apply(EQC,Prop,[])))
-		     end,
+compare_n(Module,EQC,Prop,Start,End,Step,ID,SuiteFolder) ->
+    SuiteFile = suite_name(Module,End,ID,SuiteFolder) ++ ".suite",
+    io:format("Will use suite file: ~p~n",[SuiteFile]),
+    case filelib:is_file(SuiteFile) of
+	true ->
+	    ok;
+	false ->
+	    make_tests(Module,EQC,Prop,End,ID,SuiteFolder)
+    end,
+    {ok, Binary} = file:read_file(SuiteFile),
+    {random,Tests} = binary_to_term(Binary),
     lists:map(fun(N) ->
 		      {SubTests,_} = lists:split(N,Tests),
-		      V = compare(Module,EQC,Prop,{random,SubTests}),
-		      CSV = lists:flatten(io_lib:format("~w~n",[V])),
+		      {CPerc,SPerc,COut,SOut} = compare(Module,EQC,Prop,{random,SubTests}),
+		      CSV = lists:flatten(io_lib:format("~w,~w,~w,~w,~w~n",[N,CPerc,SPerc,COut,SOut])),
 		      FileName = lists:flatten(io_lib:format("~w-~w-~w-~w_stat_results.csv",[Module,EQC,Prop,N])),
 		      file:write_file(FileName,CSV,[append])
 	      end,
