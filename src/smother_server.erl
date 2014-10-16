@@ -440,7 +440,23 @@ add_match([S | Ss]) ->
 	matchedsubs=add_match(S#pat_log.matchedsubs)
        } | add_match(Ss)].
 
-
+match_record_subs([],_FieldBindings,_Bindings) ->
+    {ok,[]};
+match_record_subs([#pat_log{exp={tree,record_field,_Attrs,{record_field,{wrapper,atom,_,{atom,_,Name}},Content}}=Exp}=PatLog | MoreSubs],FieldBindings,Bindings) ->
+    {OtherStatus,OtherSubs} = match_record_subs(MoreSubs,FieldBindings,Bindings),
+    case lists:keyfind(Name,1,FieldBindings) of
+	false ->
+	    {fail,[PatLog#pat_log{nmcount=PatLog#pat_log.nmcount+1} | OtherSubs]};
+	{Name,Val} ->
+	    [#pat_log{}=NewPatLog] = apply_pattern_log(Val,[PatLog#pat_log{exp=Content}],Bindings),
+	    if NewPatLog#pat_log.nmcount > PatLog#pat_log.nmcount ->
+		    {fail,[NewPatLog#pat_log{exp=Exp} | OtherSubs]};
+	       true ->
+		    {OtherStatus,[NewPatLog#pat_log{exp=Exp} | OtherSubs]}
+	    end
+    end;
+match_record_subs([PL | _],_FieldBindings,_Bindings) ->
+    exit({"Applying match_record_subs to somethign that's not a record field!",PL}).
 
 apply_pattern_log(_EVal,[],_Bindings) ->
     [];
@@ -497,50 +513,96 @@ apply_pattern_log(EVal,[#pat_log{exp={wrapper,variable,_Attrs,{var,_Loc,Name}},g
 	_ ->
 	    [NewPat | apply_pattern_log(EVal,Es,Bindings)]
     end;
+apply_pattern_log(EVal,[#pat_log{exp={wrapper,underscore,_Attrs,_},guards=Guards}=PatLog | Es],Bindings) ->
+    %% Matching to an underscore can't fail...
+    {Result,NewGuards} = 
+	try 
+	    match_guards(Guards,Bindings)
+	catch error:{unbound_var,V} ->
+		io:format("Error: unbound var ~p~n",[V]),
+		{fail,Guards}
+	end,
+    
+    NewPat = PatLog#pat_log{
+	       mcount=PatLog#pat_log.mcount+1,
+	       matchedsubs=add_match(PatLog#pat_log.matchedsubs),
+	       guards=NewGuards
+	      },
+    
+    %%io:format("Pattern MATCH, Guards: ~p~n",[Result]),
+    case Result of
+	ok ->
+	    %% Don't continue on the other patterns once a pattern matches, they should not show any evaluation
+	    [NewPat | Es];
+	_ ->
+	    [NewPat | apply_pattern_log(EVal,Es,Bindings)]
+    end;
 apply_pattern_log({smother_record,Fields,Values}=EVal,
 		  [#pat_log{
 		      exp={tree,record_expr,_Attr,{record_expr,none,{tree,atom,_NAttr,Name},_ExpContent}}
-			   ,subs=_Subs,guards=Guards,extras=Extras}=PatLog | Es]
+			   ,subs=Subs,guards=Guards,extras=Extras}=PatLog | Es]
 		   ,Bindings)->
     
-    %% This is the case where a record is matched but we need to confirm whether all the components match
-    %% If the record has completely miss-matched we would not be here
-    NewBindings = 
+    FieldBindings = 
 	lists:zip([smother_record_name|Fields],tuple_to_list(Values)),
-    
-    %% Now check for guard matches...
-    {Result,NewGuards} = 
-    	try 
-    	    match_guards(Guards,Bindings++NewBindings)
-    	catch error:{unbound_var,V} ->
-    		io:format("Error: unbound var ~p~n",[V]),
-    		{fail,Guards}
-    	end,
-    case process_subs(PatLog,EVal,Bindings) of
-    	{NewSubs,Extra} ->
-    	    NewExtras = 
-    		case Extra of
-    		    no_extras ->
-    			Extras;
-    		    _ ->
-    			case lists:keyfind(Extra,1,Extras) of
-    			    {Extra,EMCount} ->
-    				lists:keyreplace(Extra,1,Extras,{Extra,EMCount+1});
-    			    _ ->
-    				io:format("Unknown extra result: ~p in record ~p~n",[Extra,Name]),
-    				Extras
-    			end
-    		end,
-    	    case Result of
-    		ok ->
-    		    %% Guards passed, so don't show evaluation of further patterns
-    		    [PatLog#pat_log{mcount=PatLog#pat_log.mcount+1,subs=NewSubs,extras=NewExtras,guards=NewGuards}|Es];
-		
-    		fail ->
-    		    [PatLog#pat_log{mcount=PatLog#pat_log.mcount+1,subs=NewSubs,extras=NewExtras,guards=NewGuards}| apply_pattern_log(EVal,Es,Bindings)]
-    	    end;
-    	Err ->
-    	    exit({"Unexpected result from process_subs",Err})
+    {SubResult,NewSubs} = match_record_subs(Subs,FieldBindings,Bindings),
+    case SubResult of
+	fail ->
+	    [PatLog#pat_log{nmcount=PatLog#pat_log.nmcount+1,subs=NewSubs}| apply_pattern_log(EVal,Es,Bindings)];
+	_ ->
+	    %% Now check for guard matches...
+	    {Result,NewGuards} = 
+		try 
+		    %% FIXME: needs bindings from record fields...
+		    match_guards(Guards,Bindings)
+		catch error:{unbound_var,V} ->
+			io:format("Error: unbound var ~p~n",[V]),
+			{fail,Guards}
+		end,
+	    case process_subs(PatLog,EVal,Bindings) of
+		{NewSubs,Extra} ->
+		    NewExtras = 
+			case Extra of
+			    no_extras ->
+				Extras;
+			    _ ->
+				case lists:keyfind(Extra,1,Extras) of
+				    {Extra,EMCount} ->
+					lists:keyreplace(Extra,1,Extras,{Extra,EMCount+1});
+				    _ ->
+					io:format("Unknown extra result: ~p in record ~p~n",[Extra,Name]),
+					Extras
+				end
+			end,
+		    case Result of
+			ok ->
+			    %% Guards passed, so don't show evaluation of further patterns
+			    [PatLog#pat_log{mcount=PatLog#pat_log.mcount+1,subs=NewSubs,extras=NewExtras,guards=NewGuards}|Es];
+			
+			fail ->
+			    [PatLog#pat_log{mcount=PatLog#pat_log.mcount+1,subs=NewSubs,extras=NewExtras,guards=NewGuards}| apply_pattern_log(EVal,Es,Bindings)]
+		    end;
+		Err ->
+		    exit({"Unexpected result from process_subs",Err})
+	    end
+    end;
+apply_pattern_log(EVal,[#pat_log{exp={tree,match_expr,_Attrs,{match_expr, Left,Right}}=Exp}=PatLog | Es],Bindings) ->
+    case Left of
+	{wrapper,variable,_VAttrs,_Image} ->
+	    %%io:format("Matching just ~p vs ~p~n",[EVal,Right]),
+	    [#pat_log{}=NewPatLog| NewEs] = apply_pattern_log(EVal,[PatLog#pat_log{exp=Right}| Es],Bindings),
+	    [NewPatLog#pat_log{exp=Exp} | NewEs];
+	_ ->
+	    case Right of
+		{wrapper,variable,_VAttrs,_Image} ->
+		    %%io:format("Matching just ~p vs ~p~n",[EVal,Left]),
+		    [#pat_log{}=NewPatLog| NewEs] = apply_pattern_log(EVal,[PatLog#pat_log{exp=Left}| Es],Bindings),
+		    [NewPatLog#pat_log{exp=Exp} | NewEs];
+		_ ->
+		    %% A match expression with no variables?
+		    %% Is that even allowed in patterns?
+		    exit({"Smother can't handle match expressions with complex components on both sides.",{match_expr, Left,Right}})
+	    end
     end;
 apply_pattern_log(EVal,[#pat_log{exp=Exp,guards=Guards,extras=Extras}=PatLog | Es],Bindings) ->
     %%io:format("FALLTHROUGH:~n~p~n~p~n------------------------------~n",[EVal,Exp]),

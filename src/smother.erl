@@ -171,27 +171,35 @@ rename_underscores_and_records(A) ->
 	    A
     end.
 
+make_smother_record(Name,Other,All) ->
+    Label = case Other of
+		{wrapper,variable,_VAttrs,Image} ->
+		    ?PP(Image);
+		_ ->
+		    ?PP(All)
+	    end,
+    lists:flatten(io_lib:format("{smother_record,record_info(fields,~w),~s}",[Name,Label])).
+
 %% @hidden
 get_useful_args(A) ->
     case A of
 	{tree,match_expr,_Attrs,{match_expr, Left,Right}} ->
 	    case Left of
-		{wrapper,variable,_VAttrs,Image} ->
-		    ?PP(Image);
-		{tree,record_expr,_Attrs,{record_expr,none,{tree,atom,_,Name},_Content}} ->
-		    Label = case Right of
+		{tree,record_expr,_LeftAttrs,{record_expr,none,{tree,atom,_,Name},_Content}} ->
+		    make_smother_record(Name,Right,A);
+		_ ->
+		    case Right of
+			{tree,record_expr,_RightAttrs,{record_expr,none,{tree,atom,_,Name},_Content}} ->
+			    make_smother_record(Name,Left,A);
+			{wrapper,variable,_VAttrs,Image} ->
+			    ?PP(Image);
+			_ ->
+			    case Left of
 				{wrapper,variable,_VAttrs,Image} ->
 				    ?PP(Image);
 				_ ->
 				    ?PP(A)
-			    end,
-		    lists:flatten(io_lib:format("{smother_record,record_info(fields,~w),~s}",[Name,Label]));
-		_ ->
-		    case Right of
-			{wrapper,variable,_VAttrs,Image} ->
-			    ?PP(Image);
-			_ ->
-			    ?PP(A)
+			    end
 		    end
 	    end;
 	_ ->

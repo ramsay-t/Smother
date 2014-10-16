@@ -23,7 +23,7 @@ dv(#abrecord{a=_,b=#subrecord{i=I,j=J}}) ->
     I / J;
 dv(#abrecord{a=0,b=5}) ->
     5;
-dv(#abrecord{a=A,b=B}) ->
+dv(#abrecord{a=A,b=B}=_Rec) ->
     B / A.
 
 compile_test() ->
