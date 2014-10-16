@@ -440,8 +440,63 @@ add_match([S | Ss]) ->
 	matchedsubs=add_match(S#pat_log.matchedsubs)
        } | add_match(Ss)].
 
+
+
 apply_pattern_log(_EVal,[],_Bindings) ->
     [];
+apply_pattern_log(EVal,[#pat_log{exp={wrapper,integer,_Attrs,{integer,_Loc,Image}},guards=Guards}=PatLog | Es],Bindings) when is_integer(EVal) ->
+    EVImg = lists:flatten(io_lib:format("~w",[EVal])),
+    if EVImg == Image ->
+	    {Result,NewGuards} = 
+		try 
+		    match_guards(Guards,Bindings)
+		catch error:{unbound_var,V} ->
+			io:format("Error: unbound var ~p~n",[V]),
+			{fail,Guards}
+		end,
+	    
+	    NewPat = PatLog#pat_log{
+		       mcount=PatLog#pat_log.mcount+1,
+		       matchedsubs=add_match(PatLog#pat_log.matchedsubs),
+		       guards=NewGuards
+		      },
+	    
+	    %%io:format("Pattern MATCH, Guards: ~p~n",[Result]),
+	    case Result of
+		ok ->
+		    %% Don't continue on the other patterns once a pattern matches, they should not show any evaluation
+		    [NewPat | Es];
+		_ ->
+		    [NewPat | apply_pattern_log(EVal,Es,Bindings)]
+	    end;
+       true ->
+	    %% A simple integer has no subs or extras
+	    [PatLog#pat_log{nmcount=PatLog#pat_log.nmcount+1}| apply_pattern_log(EVal,Es,Bindings)]
+    end;
+apply_pattern_log(EVal,[#pat_log{exp={wrapper,variable,_Attrs,{var,_Loc,Name}},guards=Guards}=PatLog | Es],Bindings) ->
+    %% Matching to a variable can't fail...
+    {Result,NewGuards} = 
+	try 
+	    match_guards(Guards,Bindings++[{Name,EVal}])
+	catch error:{unbound_var,V} ->
+		io:format("Error: unbound var ~p~n",[V]),
+		{fail,Guards}
+	end,
+    
+    NewPat = PatLog#pat_log{
+	       mcount=PatLog#pat_log.mcount+1,
+	       matchedsubs=add_match(PatLog#pat_log.matchedsubs),
+	       guards=NewGuards
+	      },
+    
+    %%io:format("Pattern MATCH, Guards: ~p~n",[Result]),
+    case Result of
+	ok ->
+	    %% Don't continue on the other patterns once a pattern matches, they should not show any evaluation
+	    [NewPat | Es];
+	_ ->
+	    [NewPat | apply_pattern_log(EVal,Es,Bindings)]
+    end;
 apply_pattern_log({smother_record,Fields,Values}=EVal,
 		  [#pat_log{
 		      exp={tree,record_expr,_Attr,{record_expr,none,{tree,atom,_NAttr,Name},_ExpContent}}
