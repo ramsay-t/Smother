@@ -887,7 +887,7 @@ apply_fun_log(Loc,LogData,[{PreLoc,Rec} | Ps]) ->
 de_pid(EVal) ->
     %% PIDs, Ports, and Functions are all non-decmposible so they will just be bound to variables...
     if is_pid(EVal) or is_port(EVal) or is_function(EVal) or is_reference(EVal) ->
-	    list_to_atom(lists:flatten(io_lib:format("~p",[EVal])));
+	    lists:flatten(io_lib:format("~p",[EVal]));
        is_list(EVal) ->
 	    [de_pid(EV) || EV <- EVal];
        is_tuple(EVal) ->

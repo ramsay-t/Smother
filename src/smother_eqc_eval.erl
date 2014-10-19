@@ -3,7 +3,7 @@
 -export([make_tests/6,compare/4,compare_n/8,suite_name/4]).
 
 suite_name(Module,NumTests,ID,SuiteFolder) ->
-    filename:join(SuiteFolder,list_to_atom(lists:flatten(io_lib:format("~p_~p_~p",[Module,NumTests,ID])))).
+    filename:join(SuiteFolder,lists:flatten(io_lib:format("~p_~p_~p",[Module,NumTests,ID]))).
 
 make_tests(Module, EQC, Prop, NumTests, ID, SuiteFolder) ->
     GStart = now(),
