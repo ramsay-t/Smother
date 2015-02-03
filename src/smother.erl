@@ -171,7 +171,7 @@ rename_underscores_and_records(A) ->
 	    A
     end.
 
-make_smother_record(Name,Other,All) ->
+make_smother_record(Name,_Content,Other,All) ->
     Label = case Other of
 		{wrapper,variable,_VAttrs,Image} ->
 		    ?PP(Image);
@@ -185,12 +185,12 @@ get_useful_args(A) ->
     case A of
 	{tree,match_expr,_Attrs,{match_expr, Left,Right}} ->
 	    case Left of
-		{tree,record_expr,_LeftAttrs,{record_expr,none,{tree,atom,_,Name},_Content}} ->
-		    make_smother_record(Name,Right,A);
+		{tree,record_expr,_LeftAttrs,{record_expr,none,{tree,atom,_,Name},Content}} ->
+		    make_smother_record(Name,Content,Right,A);
 		_ ->
 		    case Right of
-			{tree,record_expr,_RightAttrs,{record_expr,none,{tree,atom,_,Name},_Content}} ->
-			    make_smother_record(Name,Left,A);
+			{tree,record_expr,_RightAttrs,{record_expr,none,{tree,atom,_,Name},Content}} ->
+			    make_smother_record(Name,Content,Left,A);
 			{wrapper,variable,_VAttrs,Image} ->
 			    ?PP(Image);
 			_ ->
