@@ -37,7 +37,6 @@ compile(Filename,Options) ->
     {module,ModName} = lists:keyfind(module,1,ModInfo),
 
     wrangler_ast_server:start_ast_server(),
-    smother_server:init_file(ModName,Filename),
 %%    smother_server:clear(ModName),
 
     Includes = [I || {i,I} <- Options],
@@ -47,7 +46,7 @@ compile(Filename,Options) ->
 		   _ ->
 		       make_pp_file(Filename,Includes)
 	       end,
-
+    smother_server:init_file(ModName,TrueFile),
     AST2 = instrument(ModName,TrueFile),
     Code = wrangler_prettypr:print_ast('unix',AST2),
 

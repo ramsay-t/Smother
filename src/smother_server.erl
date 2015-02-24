@@ -760,13 +760,13 @@ process_subs(#pat_log{exp={tree,list,_Attrs,_Content}=Exp,subs=Subs},EVal,Bindin
 	       true ->
 		    {Subs, no_extras}
 	    end;
-	{string,_Line,Content} ->
+	{string,_Line,ValContent} ->
 	    if L == 0 ->
 		    {Subs,non_empty_list};
-	       L /= length(Content) ->
+	       L /= length(ValContent) ->
 		    {Subs,list_size_mismatch};
 	       true ->
-		    ZipList = lists:zip(Subs,Content),
+		    ZipList = lists:zip(Subs,ValContent),
 		    NewSubs = lists:flatten(lists:map(fun({S,VC}) ->
 							      %% VC will be char codes here so no need to normalise them...
 							      apply_pattern_log(
