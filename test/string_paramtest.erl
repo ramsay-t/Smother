@@ -24,6 +24,6 @@ tt() ->
 
 comp_test("Hello, " ++ World) ->
     io:format("Hello, ~s~n",[World]);
-comp_test(String) ->
+comp_test(_String) ->
     io:format("Thats not very polite!~n").
 
