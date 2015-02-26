@@ -7,9 +7,7 @@
 testfun() ->
     ifun1(),
     ifun2(),
-    ?IMAC1(),
-    ?IMAC2(),
-    ok.
+    {?IMAC1(),?IMAC2()}.
 
 test() ->
     smother:compile(?FILE,[preprocess,{i,"test"}]),
