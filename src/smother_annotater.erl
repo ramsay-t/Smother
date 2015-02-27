@@ -81,9 +81,6 @@ make_tmp_file(ModName,Code) ->
     FName = get_tmp() ++ atom_to_list(ModName) ++ ".erl",
     io:format("Making ~p~n",[FName]),
     file:write_file(FName,Code++"\n"),
-%%    {ok, F} = file:open(FName,[write]),
-%%    io:fwrite(F,Code,[]),
-%%    file:close(F),
     FName.
 
 get_tmp() ->

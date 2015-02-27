@@ -49,18 +49,37 @@ compile(Filename,Options) ->
     smother_server:init_file(ModName,TrueFile),
     AST2 = instrument(ModName,TrueFile),
     Code = wrangler_prettypr:print_ast('unix',AST2),
-
+    SourceDir = case filename:dirname(Filename) of
+		    "/" ++ SrcDir ->
+			%% Technically, this only works on Unix-like systems
+			"/" ++ SrcDir;
+		    SrcDir ->
+			{ok,CWD} = file:get_cwd(),
+			filename:join([CWD,SrcDir])
+		end,
     TmpFile = smother_annotater:make_tmp_file(ModName,Code),
-    {ok,Forms} = epp:parse_file(TmpFile,Includes,[{'TEST', true}]),
+    {ok,Forms} = epp:parse_file(TmpFile,[{i,SourceDir}|Includes],[{'TEST', true}]),
 
     smother_server:store_zero(),
 
-    case compile:forms(Forms,[binary,debug_info,verbose,report_errors,report_warnings,{source,TrueFile}]) of
+    case compile:forms(Forms,[binary,debug_info,verbose,report_errors,report_warnings,{source,TrueFile},{i,SourceDir}|Includes]) of
 	{ok,Module,Binary} ->
 	    code:load_binary(Module,TrueFile,Binary);
 	Error ->
 	    Error
     end.
+
+strip_file_directives("") ->
+    "";
+strip_file_directives("-file" ++ More) ->
+    stripping_file_directives(More);
+strip_file_directives([C | Code]) ->
+    [C | strip_file_directives(Code)].
+
+stripping_file_directives(".\n" ++ Code) ->
+    strip_file_directives(Code);
+stripping_file_directives([_ | Code]) ->
+    stripping_file_directives(Code).
 
 %% @doc Compiles several files, returning 2 lists: successes and errors
 compile_batch(Files, Options) ->
@@ -377,7 +396,7 @@ make_pp_file(Filename,Includes) ->
 
     FName = smother_annotater:get_tmp() ++ atom_to_list(ModName) ++ ".epp",
     %%io:format("Making ~p~n",[FName]),
-    file:write_file(FName,Code++"\n"),
+    file:write_file(FName,strip_file_directives(Code)++"\n"),
     FName.
 
 %% @doc Produces readable analysis reports.
