@@ -69,17 +69,21 @@ compile(Filename,Options) ->
 	    Error
     end.
 
-strip_file_directives("") ->
+strip_directives("") ->
     "";
-strip_file_directives("-file" ++ More) ->
-    stripping_file_directives(More);
-strip_file_directives([C | Code]) ->
-    [C | strip_file_directives(Code)].
+strip_directives("-file" ++ More) ->
+    stripping_directives(More);
+strip_directives("-type" ++ More) ->
+    stripping_directives(More);
+strip_directives("-spec" ++ More) ->
+    stripping_directives(More);
+strip_directives([C | Code]) ->
+    [C | strip_directives(Code)].
 
-stripping_file_directives(".\n" ++ Code) ->
-    strip_file_directives(Code);
-stripping_file_directives([_ | Code]) ->
-    stripping_file_directives(Code).
+stripping_directives(".\n" ++ Code) ->
+    strip_directives(Code);
+stripping_directives([_ | Code]) ->
+    stripping_directives(Code).
 
 %% @doc Compiles several files, returning 2 lists: successes and errors
 compile_batch(Files, Options) ->
@@ -396,7 +400,7 @@ make_pp_file(Filename,Includes) ->
 
     FName = smother_annotater:get_tmp() ++ atom_to_list(ModName) ++ ".epp",
     %%io:format("Making ~p~n",[FName]),
-    file:write_file(FName,strip_file_directives(Code)++"\n"),
+    file:write_file(FName,strip_directives(Code)++"\n"),
     FName.
 
 %% @doc Produces readable analysis reports.
