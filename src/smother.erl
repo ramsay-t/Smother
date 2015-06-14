@@ -58,7 +58,7 @@ compile(Filename,Options) ->
 			filename:join([CWD,SrcDir])
 		end,
     TmpFile = smother_annotater:make_tmp_file(ModName,Code),
-    {ok,Forms} = epp:parse_file(TmpFile,[{i,SourceDir}|Includes],[{'TEST', true}]),
+    {ok,Forms} = epp:parse_file(TmpFile,[SourceDir|Includes],[{'TEST', true}]),
 
     smother_server:store_zero(),
 
