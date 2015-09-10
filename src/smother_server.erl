@@ -95,7 +95,7 @@ handle_call({declare,Module,Loc,Declaration},State) ->
 				     end,
 				     Content),
 		%% Fix the last pattern to ignore fall through
-		%% FIXME: add config to require defensive code?
+		%% FIXME: add config to require defensive code or not?
 		ExpRecords2 = ignore_fallthrough(ExpRecords),
 		lists:keystore(Loc,1,FDict,{Loc,{case_expr,ExpRecords2}});
 	    {receive_expr,Content} ->
