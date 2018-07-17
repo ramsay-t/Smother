@@ -1,11 +1,10 @@
 {application, smother,
- [
-  {description, "Extended code coverage metrics for Erlang"},
+ [{description, "Extended code coverage metrics for Erlang"},
   {vsn, ""},
   {registered, []},
-  {applications, [
-                  kernel,
-                  stdlib
+  {applications, [kernel, stdlib
+                 ,jsx
+                 ,wrangler
                  ]},
   {env, []}
  ]}.
