@@ -2,7 +2,7 @@
 [{<<"jsx">>,{pkg,<<"jsx">>,<<"2.9.0">>},0},
  {<<"wrangler">>,
   {git,"https://github.com/RefactoringTools/wrangler.git",
-       {ref,"aa2330a8d2b6748ab55ed6079609d1875d32eaae"}},
+       {ref,"17ff0338b2bc846d3d02983b66e7e1dcaed0c197"}},
   0}]}.
 [
 {pkg_hash,[
