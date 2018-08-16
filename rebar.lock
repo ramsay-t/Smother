@@ -1,8 +1,8 @@
 {"1.1.0",
 [{<<"jsx">>,{pkg,<<"jsx">>,<<"2.9.0">>},0},
  {<<"wrangler">>,
-  {git,"https://github.com/RefactoringTools/wrangler.git",
-       {ref,"17ff0338b2bc846d3d02983b66e7e1dcaed0c197"}},
+  {git,"https://github.com/fenollp/wrangler.git",
+       {ref,"84eace4d127d4f3b151831aed0c37762e6848640"}},
   0}]}.
 [
 {pkg_hash,[
