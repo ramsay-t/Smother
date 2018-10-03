@@ -27,7 +27,7 @@ dv(#abrecord{a=A,b=B}=_Rec) ->
     B / A.
 
 compile_test() ->
-    smother:compile("../test/" ++ atom_to_list(?MODULE) ++ ".erl"),
+    smother:compile("test/" ++ atom_to_list(?MODULE) ++ ".erl"),
     ?assertEqual(0.5, abrecordtest:dv(#abrecord{a=1,b=#subrecord{i=2,j=4}})).
 
 %% full_test() ->

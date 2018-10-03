@@ -10,7 +10,7 @@ dv(A,B) ->
     B / A.
 
 do_tests(Module,Ts) ->
-    smother:compile("../test/" ++ atom_to_list(Module) ++ ".erl"),
+    smother:compile("test/" ++ atom_to_list(Module) ++ ".erl"),
     lists:map(fun({Fun,Args}) ->
 		      catch erlang:apply(Module,Fun,Args)
 	      end,Ts),

@@ -12,6 +12,6 @@ testfun() ->
     {?IMAC1(),?IMAC2()}.
 
 compile_test() ->
-    smother:compile("../" ++ ?FILE,[preprocess]),
+    smother:compile(?FILE, [preprocess]),
     smother:analyse_to_file(?MODULE).
 
